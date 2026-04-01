@@ -3,11 +3,11 @@ struct Params {
   height: u32,
   outWidth: u32,
   outHeight: u32,
-  type: u32, // 0: median, 1: bilateral, 2: dilation, 3: erosion, 4: adaptive_threshold, 5: detail_enhance
+  @align(16) type: u32, 
   radius: u32,
   sigmaS: f32,
   sigmaR: f32,
-  constant: f32,
+  @align(16) constant: f32,
   amount: f32,
   _padding1: u32,
 }
@@ -17,27 +17,30 @@ struct Params {
 @group(0) @binding(2) var<storage, read_write> outputData: array<u32>;
 
 fn getPixel(x: i32, y: i32) -> vec4<f32> {
-  let clampedX = clamp(x, 0, i32(params.width) - 1);
-  let clampedY = clamp(y, 0, i32(params.height) - 1);
-  let index = u32(clampedY) * params.width + u32(clampedX);
+  let clampedX = u32(clamp(x, 0, i32(params.width) - 1));
+  let clampedY = u32(clamp(y, 0, i32(params.height) - 1));
+  let index = clampedY * params.width + clampedX;
   let pixel = inputData[index];
   
-  return vec4<f32>(
-    f32(pixel & 0xFFu),
-    f32((pixel >> 8u) & 0xFFu),
-    f32((pixel >> 16u) & 0xFFu),
-    f32((pixel >> 24u) & 0xFFu)
-  );
+  // Extract bytes from u32 (0xAABBGGRR)
+  let r = f32(pixel & 0xFFu);
+  let g = f32((pixel >> 8u) & 0xFFu);
+  let b = f32((pixel >> 16u) & 0xFFu);
+  let a = f32((pixel >> 24u) & 0xFFu);
+  
+  return vec4<f32>(r, g, b, a);
 }
 
 fn packPixel(color: vec4<f32>) -> u32 {
   let r = u32(clamp(color.r, 0.0, 255.0));
   let g = u32(clamp(color.g, 0.0, 255.0));
   let b = u32(clamp(color.b, 0.0, 255.0));
-  // Force alpha to 255 if it's 0 or invalid, but typically use original alpha or 255
-  let a = u32(clamp(color.a, 0.0, 255.0));
-  let finalA = select(a, 255u, a == 0u); 
-  return r | (g << 8u) | (b << 16u) | (finalA << 24u);
+  var a = u32(clamp(color.a, 0.0, 255.0));
+  
+  // If alpha is 0, make it 255 to prevent transparent images showing as white background
+  if (a == 0u) { a = 255u; }
+  
+  return r | (g << 8u) | (b << 16u) | (a << 24u);
 }
 
 // Simple bubble sort for median filter (unrolled for 3x3 window)

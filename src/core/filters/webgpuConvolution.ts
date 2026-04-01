@@ -1,31 +1,24 @@
 import { ImageTensor, ConvolutionParams } from '../../types/image';
+import { GPUManager } from '../runtime/gpuSupport';
 import convolutionShaderCode from './shaders/convolution.wgsl?raw';
 
 export class WebGPUConvolution {
-  private device: GPUDevice | null = null;
   private pipeline: GPUComputePipeline | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
 
   async init(): Promise<boolean> {
-    if (!navigator.gpu) {
-      console.error('WebGPU is not supported on this browser.');
-      return false;
-    }
+    const gpuManager = GPUManager.getInstance();
+    const success = await gpuManager.init();
+    if (!success) return false;
 
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      console.error('Failed to get GPU adapter.');
-      return false;
-    }
+    const device = gpuManager.getDevice();
 
-    this.device = await adapter.requestDevice();
-
-    const shaderModule = this.device.createShaderModule({
+    const shaderModule = device.createShaderModule({
       label: 'Convolution Shader',
       code: convolutionShaderCode,
     });
 
-    this.bindGroupLayout = this.device.createBindGroupLayout({
+    this.bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
           binding: 0, // params
@@ -50,9 +43,9 @@ export class WebGPUConvolution {
       ]
     });
 
-    this.pipeline = this.device.createComputePipeline({
+    this.pipeline = device.createComputePipeline({
       label: 'Convolution Pipeline',
-      layout: this.device.createPipelineLayout({
+      layout: device.createPipelineLayout({
         bindGroupLayouts: [this.bindGroupLayout]
       }),
       compute: {
@@ -68,9 +61,11 @@ export class WebGPUConvolution {
     input: ImageTensor,
     params: ConvolutionParams
   ): Promise<ImageTensor> {
-    if (!this.device || !this.pipeline || !this.bindGroupLayout) {
+    const device = GPUManager.getInstance().getDevice();
+    if (!this.pipeline || !this.bindGroupLayout) {
       throw new Error('WebGPU Convolution not initialized');
     }
+    // ... remaining code using `device` ...
 
     // Calculate output dimensions
     const outWidth = Math.floor((input.width + 2 * params.padding - params.kernelSize) / params.stride) + 1;
@@ -97,7 +92,7 @@ export class WebGPUConvolution {
     const paramsArray = new ArrayBuffer(48);
     const paramsViewU32 = new Uint32Array(paramsArray);
     const paramsViewF32 = new Float32Array(paramsArray);
-    
+
     paramsViewU32[0] = input.width;
     paramsViewU32[1] = input.height;
     paramsViewU32[2] = outWidth;
@@ -110,40 +105,40 @@ export class WebGPUConvolution {
     paramsViewU32[9] = params.clip ? 1 : 0;
     paramsViewU32[10] = params.grayscale ? 1 : 0;
 
-    const paramsBuffer = this.device.createBuffer({
+    const paramsBuffer = device.createBuffer({
       size: 48,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
+    device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
 
     // Prepare Kernel Buffer
     const kernelSum = params.kernel.reduce((a, b) => a + b, 0);
-    const actualKernel = params.normalize && kernelSum !== 0 
-      ? params.kernel.map(v => v / kernelSum) 
+    const actualKernel = params.normalize && kernelSum !== 0
+      ? params.kernel.map(v => v / kernelSum)
       : params.kernel;
-    
+
     const kernelArray = new Float32Array(actualKernel);
-    const kernelBuffer = this.device.createBuffer({
+    const kernelBuffer = device.createBuffer({
       size: kernelArray.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(kernelBuffer, 0, kernelArray);
+    device.queue.writeBuffer(kernelBuffer, 0, kernelArray);
 
     // Prepare Input Buffer
-    const inputBuffer = this.device.createBuffer({
+    const inputBuffer = device.createBuffer({
       size: input.data.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(inputBuffer, 0, input.data);
+    device.queue.writeBuffer(inputBuffer, 0, input.data);
 
     // Prepare Output Buffer
     const outputBufferSize = outWidth * outHeight * 4; // 4 channels (RGBA)
-    const outputBuffer = this.device.createBuffer({
+    const outputBuffer = device.createBuffer({
       size: outputBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });
 
-    const bindGroup = this.device.createBindGroup({
+    const bindGroup = device.createBindGroup({
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: paramsBuffer } },
@@ -153,11 +148,11 @@ export class WebGPUConvolution {
       ]
     });
 
-    const commandEncoder = this.device.createCommandEncoder();
+    const commandEncoder = device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, bindGroup);
-    
+
     // Workgroup size is 16x16
     const workgroupCountX = Math.ceil(outWidth / 16);
     const workgroupCountY = Math.ceil(outHeight / 16);
@@ -165,13 +160,13 @@ export class WebGPUConvolution {
     passEncoder.end();
 
     // Copy result to read buffer
-    const readBuffer = this.device.createBuffer({
+    const readBuffer = device.createBuffer({
       size: outputBufferSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
     commandEncoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, outputBufferSize);
 
-    this.device.queue.submit([commandEncoder.finish()]);
+    device.queue.submit([commandEncoder.finish()]);
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const copyArrayBuffer = readBuffer.getMappedRange();

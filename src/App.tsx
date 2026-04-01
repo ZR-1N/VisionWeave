@@ -11,6 +11,7 @@ import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/i
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
 import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
+import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle } from 'lucide-react';
 import { KERNEL_PRESETS } from './core/filters/presets';
@@ -49,12 +50,23 @@ function App() {
   const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
 
   useEffect(() => {
-    Promise.all([filterEngine.init(), nonLinearEngine.init()])
-      .then(([fSupp, nSupp]) => setWebgpuSupported(fSupp && nSupp))
-      .catch(err => {
+    const initGPU = async () => {
+      const gpuManager = GPUManager.getInstance();
+      const success = await gpuManager.init();
+      if (!success) {
         setWebgpuSupported(false);
-        console.error(err);
-      });
+        return;
+      }
+
+      const fSupp = await filterEngine.init();
+      const nSupp = await nonLinearEngine.init();
+      setWebgpuSupported(fSupp && nSupp);
+    };
+
+    initGPU().catch(err => {
+      setWebgpuSupported(false);
+      console.error(err);
+    });
   }, [filterEngine, nonLinearEngine]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {

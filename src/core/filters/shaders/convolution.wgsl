@@ -3,11 +3,11 @@ struct Params {
   height: u32,
   outWidth: u32,
   outHeight: u32,
-  kernelSize: u32,
+  @align(16) kernelSize: u32,
   stride: u32,
   padding: u32,
   bias: f32,
-  normalize: u32,
+  @align(16) normalize: u32,
   clip: u32,
   grayscale: u32,
 }

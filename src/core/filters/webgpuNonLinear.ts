@@ -1,8 +1,8 @@
 import { ImageTensor, NonLinearFilterParams, NonLinearFilterType } from '../../types/image';
+import { GPUManager } from '../runtime/gpuSupport';
 import nonLinearShaderCode from './shaders/nonLinear.wgsl?raw';
 
 export class WebGPUNonLinearFilter {
-  private device: GPUDevice | null = null;
   private pipeline: GPUComputePipeline | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
 
@@ -16,19 +16,18 @@ export class WebGPUNonLinearFilter {
   };
 
   async init(): Promise<boolean> {
-    if (!navigator.gpu) return false;
+    const gpuManager = GPUManager.getInstance();
+    const success = await gpuManager.init();
+    if (!success) return false;
 
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return false;
+    const device = gpuManager.getDevice();
 
-    this.device = await adapter.requestDevice();
-
-    const shaderModule = this.device.createShaderModule({
+    const shaderModule = device.createShaderModule({
       label: 'Non-Linear Filter Shader',
       code: nonLinearShaderCode,
     });
 
-    this.bindGroupLayout = this.device.createBindGroupLayout({
+    this.bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
           binding: 0, // params
@@ -48,9 +47,9 @@ export class WebGPUNonLinearFilter {
       ]
     });
 
-    this.pipeline = this.device.createComputePipeline({
+    this.pipeline = device.createComputePipeline({
       label: 'Non-Linear Pipeline',
-      layout: this.device.createPipelineLayout({
+      layout: device.createPipelineLayout({
         bindGroupLayouts: [this.bindGroupLayout]
       }),
       compute: {
@@ -66,9 +65,11 @@ export class WebGPUNonLinearFilter {
     input: ImageTensor,
     params: NonLinearFilterParams
   ): Promise<ImageTensor> {
-    if (!this.device || !this.pipeline || !this.bindGroupLayout) {
+    const device = GPUManager.getInstance().getDevice();
+    if (!this.pipeline || !this.bindGroupLayout) {
       throw new Error('WebGPU Non-Linear Filter not initialized');
     }
+    // ... remaining code using `device` ...
 
     // struct Params {
     //   width: u32,
@@ -98,25 +99,25 @@ export class WebGPUNonLinearFilter {
     paramsViewF32[8] = params.constant ?? 0.0;
     paramsViewF32[9] = params.amount ?? 0.0;
 
-    const paramsBuffer = this.device.createBuffer({
+    const paramsBuffer = device.createBuffer({
       size: 48,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
+    device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
 
-    const inputBuffer = this.device.createBuffer({
+    const inputBuffer = device.createBuffer({
       size: input.data.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(inputBuffer, 0, input.data);
+    device.queue.writeBuffer(inputBuffer, 0, input.data);
 
     const outputBufferSize = input.width * input.height * 4;
-    const outputBuffer = this.device.createBuffer({
+    const outputBuffer = device.createBuffer({
       size: outputBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });
 
-    const bindGroup = this.device.createBindGroup({
+    const bindGroup = device.createBindGroup({
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: paramsBuffer } },
@@ -125,7 +126,7 @@ export class WebGPUNonLinearFilter {
       ]
     });
 
-    const commandEncoder = this.device.createCommandEncoder();
+    const commandEncoder = device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, bindGroup);
@@ -135,13 +136,13 @@ export class WebGPUNonLinearFilter {
     passEncoder.dispatchWorkgroups(workgroupCountX, workgroupCountY);
     passEncoder.end();
 
-    const readBuffer = this.device.createBuffer({
+    const readBuffer = device.createBuffer({
       size: outputBufferSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
     commandEncoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, outputBufferSize);
 
-    this.device.queue.submit([commandEncoder.finish()]);
+    device.queue.submit([commandEncoder.finish()]);
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const copyArrayBuffer = readBuffer.getMappedRange();
