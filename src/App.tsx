@@ -39,6 +39,7 @@ function App() {
   const [resultImage, setResultImage] = useState<ImageTensor | null>(null);
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
+  const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear'>('convolution');
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -70,29 +71,6 @@ function App() {
   const handleApply = async () => {
     if (!originalImage) return;
     if (!webgpuSupported) {
-      setError('WebGPU is not supported. Cannot run convolution.');
-      return;
-    }
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      const start = performance.now();
-      const result = await filterEngine.applyConvolution(originalImage, params);
-      const end = performance.now();
-      console.log(`Convolution took ${end - start}ms`);
-      setResultImage(result);
-    } catch (err: any) {
-      setError('Processing failed: ' + err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleNonLinearApply = async (fParams: NonLinearFilterParams) => {
-    if (!originalImage) return;
-    if (!webgpuSupported) {
       setError('WebGPU is not supported.');
       return;
     }
@@ -102,9 +80,34 @@ function App() {
 
     try {
       const start = performance.now();
-      const result = await nonLinearEngine.applyFilter(originalImage, fParams);
+      let result: ImageTensor;
+
+      if (activeMode === 'convolution') {
+        result = await filterEngine.applyConvolution(originalImage, params);
+      } else {
+        result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
+      }
+
       const end = performance.now();
-      console.log(`Non-Linear filter took ${end - start}ms`);
+      console.log(`${activeMode} took ${end - start}ms`);
+      setResultImage(result);
+    } catch (err: any) {
+      setError('Processing failed: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleNonLinearApply = async (fParams: NonLinearFilterParams) => {
+    // Sync local params and trigger global apply
+    setNonLinearParams(fParams);
+    setActiveMode('nonlinear');
+    // We can't use the updated state immediately, so pass fParams directly
+    if (!originalImage || !webgpuSupported) return;
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const result = await nonLinearEngine.applyFilter(originalImage, fParams);
       setResultImage(result);
     } catch (err: any) {
       setError('Processing failed: ' + err.message);
@@ -146,6 +149,7 @@ function App() {
         <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2 pb-10 custom-scrollbar">
           <PresetKernelSelector
             onSelect={(preset) => {
+              setActiveMode('convolution');
               setParams(p => ({
                 ...p,
                 kernel: preset.kernel,
@@ -155,23 +159,39 @@ function App() {
             }}
           />
 
-          <KernelEditor
-            kernel={params.kernel}
-            size={params.kernelSize}
-            onChange={(k) => setParams(p => ({ ...p, kernel: k }))}
-            onSizeChange={(s) => setParams(p => ({ ...p, kernelSize: s }))}
-          />
+          <div className={activeMode === 'convolution' ? 'ring-2 ring-blue-500 rounded-lg p-1 transition-all' : ''}>
+            <KernelEditor
+              kernel={params.kernel}
+              size={params.kernelSize}
+              onChange={(k) => {
+                setActiveMode('convolution');
+                setParams(p => ({ ...p, kernel: k }));
+              }}
+              onSizeChange={(s) => {
+                setActiveMode('convolution');
+                setParams(p => ({ ...p, kernelSize: s }));
+              }}
+            />
 
-          <ConvolutionControls
-            params={params}
-            onChange={setParams}
-          />
+            <ConvolutionControls
+              params={params}
+              onChange={(p) => {
+                setActiveMode('convolution');
+                setParams(p);
+              }}
+            />
+          </div>
 
-          <NonLinearFilterSelector
-            params={nonLinearParams}
-            onChange={setNonLinearParams}
-            onApply={handleNonLinearApply}
-          />
+          <div className={activeMode === 'nonlinear' ? 'ring-2 ring-blue-500 rounded-lg p-1 transition-all' : ''}>
+            <NonLinearFilterSelector
+              params={nonLinearParams}
+              onChange={(p) => {
+                setActiveMode('nonlinear');
+                setNonLinearParams(p);
+              }}
+              onApply={handleNonLinearApply}
+            />
+          </div>
 
           <ModelSelector />
         </div>
@@ -199,7 +219,7 @@ function App() {
               ) : (
                 <Play className="w-5 h-5" />
               )}
-              Apply Convolution
+              {activeMode === 'convolution' ? 'Apply Convolution' : 'Apply Non-Linear Filter'}
             </button>
             <button
               onClick={handleDownload}
