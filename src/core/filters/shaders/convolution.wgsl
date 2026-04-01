@@ -99,10 +99,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   
   let outIndex = outY * params.outWidth + outX;
   
-  let finalR = u32(sumR);
-  let finalG = u32(sumG);
-  let finalB = u32(sumB);
-  let finalA = u32(centerA);
+  let finalR = u32(clamp(sumR, 0.0, 255.0));
+  let finalG = u32(clamp(sumG, 0.0, 255.0));
+  let finalB = u32(clamp(sumB, 0.0, 255.0));
+  var finalA = u32(clamp(centerA, 0.0, 255.0));
+  if (finalA == 0u) { finalA = 255u; }
   
   outputData[outIndex] = finalR | (finalG << 8u) | (finalB << 16u) | (finalA << 24u);
 }

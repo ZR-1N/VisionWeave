@@ -34,8 +34,10 @@ fn packPixel(color: vec4<f32>) -> u32 {
   let r = u32(clamp(color.r, 0.0, 255.0));
   let g = u32(clamp(color.g, 0.0, 255.0));
   let b = u32(clamp(color.b, 0.0, 255.0));
+  // Force alpha to 255 if it's 0 or invalid, but typically use original alpha or 255
   let a = u32(clamp(color.a, 0.0, 255.0));
-  return r | (g << 8u) | (b << 16u) | (a << 24u);
+  let finalA = select(a, 255u, a == 0u); 
+  return r | (g << 8u) | (b << 16u) | (finalA << 24u);
 }
 
 // Simple bubble sort for median filter (unrolled for 3x3 window)
@@ -98,7 +100,7 @@ fn bilateral(x: i32, y: i32) -> vec4<f32> {
     }
   }
   
-  return vec4<f32>(sumColor / sumWeight, centerP.a);
+  return vec4<f32>(sumColor / max(sumWeight, 0.0001), 255.0);
 }
 
 fn morphological(x: i32, y: i32, isDilation: bool) -> vec4<f32> {
@@ -155,7 +157,7 @@ fn detailEnhance(x: i32, y: i32) -> vec4<f32> {
   
   let mean = sum / count;
   let enhanced = centerP.rgb + (centerP.rgb - mean) * params.amount;
-  return vec4<f32>(enhanced, centerP.a);
+  return vec4<f32>(enhanced, 255.0);
 }
 
 @compute @workgroup_size(16, 16)
