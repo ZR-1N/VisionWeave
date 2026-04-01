@@ -3,12 +3,14 @@ import { ImageUploader } from './components/ImageUploader';
 import { KernelEditor } from './components/KernelEditor';
 import { ConvolutionControls } from './components/ConvolutionControls';
 import { PresetKernelSelector } from './components/PresetKernelSelector';
+import { NonLinearFilterSelector } from './components/NonLinearFilterSelector';
 import { ImagePreview } from './components/ImagePreview';
 import { ProcessInfoPanel } from './components/ProcessInfoPanel';
 import { ModelSelector } from './components/ModelSelector';
-import { ImageTensor, ConvolutionParams } from './types/image';
+import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/image';
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
+import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle } from 'lucide-react';
 import { KERNEL_PRESETS } from './core/filters/presets';
@@ -24,25 +26,35 @@ const defaultParams: ConvolutionParams = {
   grayscale: false,
 };
 
+const defaultNonLinearParams: NonLinearFilterParams = {
+  type: 'median',
+  radius: 1,
+  sigmaS: 5.0,
+  sigmaR: 25.0,
+  constant: 10.0
+};
+
 function App() {
   const [originalImage, setOriginalImage] = useState<ImageTensor | null>(null);
   const [resultImage, setResultImage] = useState<ImageTensor | null>(null);
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
+  const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [filterEngine] = useState(() => new WebGPUConvolution());
+  const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
 
   useEffect(() => {
-    filterEngine.init()
-      .then(supported => setWebgpuSupported(supported))
+    Promise.all([filterEngine.init(), nonLinearEngine.init()])
+      .then(([fSupp, nSupp]) => setWebgpuSupported(fSupp && nSupp))
       .catch(err => {
         setWebgpuSupported(false);
         console.error(err);
       });
-  }, [filterEngine]);
+  }, [filterEngine, nonLinearEngine]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {
     try {
@@ -70,6 +82,29 @@ function App() {
       const result = await filterEngine.applyConvolution(originalImage, params);
       const end = performance.now();
       console.log(`Convolution took ${end - start}ms`);
+      setResultImage(result);
+    } catch (err: any) {
+      setError('Processing failed: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleNonLinearApply = async (fParams: NonLinearFilterParams) => {
+    if (!originalImage) return;
+    if (!webgpuSupported) {
+      setError('WebGPU is not supported.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      const start = performance.now();
+      const result = await nonLinearEngine.applyFilter(originalImage, fParams);
+      const end = performance.now();
+      console.log(`Non-Linear filter took ${end - start}ms`);
       setResultImage(result);
     } catch (err: any) {
       setError('Processing failed: ' + err.message);
@@ -130,6 +165,12 @@ function App() {
           <ConvolutionControls
             params={params}
             onChange={setParams}
+          />
+
+          <NonLinearFilterSelector
+            params={nonLinearParams}
+            onChange={setNonLinearParams}
+            onApply={handleNonLinearApply}
           />
 
           <ModelSelector />

@@ -24,3 +24,14 @@ export interface PresetKernel {
   size: KernelSize;
   normalize?: boolean;
 }
+
+export type NonLinearFilterType = 'median' | 'bilateral' | 'dilation' | 'erosion' | 'adaptive_threshold' | 'detail_enhance';
+
+export interface NonLinearFilterParams {
+  type: NonLinearFilterType;
+  radius: number;
+  sigmaS?: number; // Spatial sigma for Bilateral
+  sigmaR?: number; // Range sigma for Bilateral
+  constant?: number; // Constant for Adaptive Threshold
+  amount?: number; // Amount for Detail Enhancement
+}
