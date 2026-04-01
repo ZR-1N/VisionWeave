@@ -77,36 +77,36 @@ export class WebGPUConvolution {
 
     // Prepare Uniform Params Buffer
     // struct Params {
-    //   width: u32,
-    //   height: u32,
-    //   outWidth: u32,
-    //   outHeight: u32,
-    //   kernelSize: u32,
-    //   stride: u32,
-    //   padding: u32,
+    //   width: f32,
+    //   height: f32,
+    //   outWidth: f32,
+    //   outHeight: f32,
+    //   kernelSize: f32,
+    //   stride: f32,
+    //   padding: f32,
     //   bias: f32,
-    //   normalize: u32, // 1 or 0
-    //   clip: u32,      // 1 or 0
-    //   grayscale: u32, // 1 or 0
-    // } -> 11 * 4 = 44 bytes, align to 48
-    const paramsArray = new ArrayBuffer(48);
-    const paramsViewU32 = new Uint32Array(paramsArray);
+    //   normalize: f32,
+    //   clip: f32,
+    //   grayscale: f32,
+    //   _padding: f32,
+    // } -> 13 * 4 = 52 bytes, align to 64
+    const paramsArray = new ArrayBuffer(64);
     const paramsViewF32 = new Float32Array(paramsArray);
 
-    paramsViewU32[0] = input.width;
-    paramsViewU32[1] = input.height;
-    paramsViewU32[2] = outWidth;
-    paramsViewU32[3] = outHeight;
-    paramsViewU32[4] = params.kernelSize;
-    paramsViewU32[5] = params.stride;
-    paramsViewU32[6] = params.padding;
+    paramsViewF32[0] = input.width;
+    paramsViewF32[1] = input.height;
+    paramsViewF32[2] = outWidth;
+    paramsViewF32[3] = outHeight;
+    paramsViewF32[4] = params.kernelSize;
+    paramsViewF32[5] = params.stride;
+    paramsViewF32[6] = params.padding;
     paramsViewF32[7] = params.bias;
-    paramsViewU32[8] = params.normalize ? 1 : 0;
-    paramsViewU32[9] = params.clip ? 1 : 0;
-    paramsViewU32[10] = params.grayscale ? 1 : 0;
+    paramsViewF32[8] = params.normalize ? 1.0 : 0.0;
+    paramsViewF32[9] = params.clip ? 1.0 : 0.0;
+    paramsViewF32[10] = params.grayscale ? 1.0 : 0.0;
 
     const paramsBuffer = device.createBuffer({
-      size: 48,
+      size: 64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
@@ -173,7 +173,8 @@ export class WebGPUConvolution {
     const data = new Uint8ClampedArray(copyArrayBuffer.slice(0));
     readBuffer.unmap();
 
-    // Clean up
+    // The buffers can be destroyed now that mapAsync has resolved,
+    // which implies all previous commands involving these buffers are complete.
     paramsBuffer.destroy();
     kernelBuffer.destroy();
     inputBuffer.destroy();

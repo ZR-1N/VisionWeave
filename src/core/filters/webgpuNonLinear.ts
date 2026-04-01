@@ -72,32 +72,33 @@ export class WebGPUNonLinearFilter {
     // ... remaining code using `device` ...
 
     // struct Params {
-    //   width: u32,
-    //   height: u32,
-    //   outWidth: u32,
-    //   outHeight: u32,
-    //   type: u32,
-    //   radius: u32,
+    //   width: f32,
+    //   height: f32,
+    //   outWidth: f32,
+    //   outHeight: f32,
+    //   filterType: f32,
+    //   radius: f32,
     //   sigmaS: f32,
     //   sigmaR: f32,
     //   constant: f32,
-    //   _padding1: u32,
-    //   _padding2: u32,
-    // } -> 11 * 4 = 44 bytes, align to 48
+    //   amount: f32,
+    //   _padding1: f32,
+    //   _padding2: f32,
+    // } -> 12 * 4 = 48 bytes
     const paramsArray = new ArrayBuffer(48);
-    const paramsViewU32 = new Uint32Array(paramsArray);
     const paramsViewF32 = new Float32Array(paramsArray);
 
-    paramsViewU32[0] = input.width;
-    paramsViewU32[1] = input.height;
-    paramsViewU32[2] = input.width;
-    paramsViewU32[3] = input.height;
-    paramsViewU32[4] = this.typeMap[params.type];
-    paramsViewU32[5] = params.radius;
+    paramsViewF32[0] = input.width;
+    paramsViewF32[1] = input.height;
+    paramsViewF32[2] = input.width;
+    paramsViewF32[3] = input.height;
+    paramsViewF32[4] = this.typeMap[params.type];
+    paramsViewF32[5] = params.radius;
     paramsViewF32[6] = params.sigmaS ?? 1.0;
     paramsViewF32[7] = params.sigmaR ?? 1.0;
     paramsViewF32[8] = params.constant ?? 0.0;
     paramsViewF32[9] = params.amount ?? 0.0;
+    // 10 and 11 are padding
 
     const paramsBuffer = device.createBuffer({
       size: 48,

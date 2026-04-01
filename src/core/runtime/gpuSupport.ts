@@ -2,8 +2,9 @@ export class GPUManager {
   private static instance: GPUManager;
   private device: GPUDevice | null = null;
   private adapter: GPUAdapter | null = null;
+  private initPromise: Promise<boolean> | null = null;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): GPUManager {
     if (!GPUManager.instance) {
@@ -13,21 +14,25 @@ export class GPUManager {
   }
 
   async init(): Promise<boolean> {
-    if (this.device) return true;
+    if (this.initPromise) return this.initPromise;
 
-    if (!navigator.gpu) {
-      console.error('WebGPU is not supported');
-      return false;
-    }
+    this.initPromise = (async () => {
+      if (!navigator.gpu) {
+        console.error('WebGPU is not supported');
+        return false;
+      }
 
-    this.adapter = await navigator.gpu.requestAdapter();
-    if (!this.adapter) {
-      console.error('Failed to get GPU adapter');
-      return false;
-    }
+      this.adapter = await navigator.gpu.requestAdapter();
+      if (!this.adapter) {
+        console.error('Failed to get GPU adapter');
+        return false;
+      }
 
-    this.device = await this.adapter.requestDevice();
-    return true;
+      this.device = await this.adapter.requestDevice();
+      return true;
+    })();
+
+    return this.initPromise;
   }
 
   getDevice(): GPUDevice {
