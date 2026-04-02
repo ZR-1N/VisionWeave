@@ -76,17 +76,17 @@ export const ImageViewerModal: React.FC<ModalProps> = ({ image, title, onClose }
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
         </div>
       </div>
-      
-      <div 
+
+      <div
         className="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        <div 
+        <div
           className="absolute transition-transform duration-75 ease-out origin-center"
-          style={{ 
+          style={{
             transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${scale})`,
             left: '50%',
             top: '50%'
@@ -106,9 +106,10 @@ export const ImageViewerModal: React.FC<ModalProps> = ({ image, title, onClose }
 interface Props {
   title: string;
   image: ImageTensor | null;
+  overlay?: React.ReactNode;
 }
 
-export const ImagePreview: React.FC<Props> = ({ title, image }) => {
+export const ImagePreview: React.FC<Props> = ({ title, image, overlay }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -140,7 +141,7 @@ export const ImagePreview: React.FC<Props> = ({ title, image }) => {
           {image && (
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-gray-400">{image.width} × {image.height}</span>
-              <button 
+              <button
                 onClick={() => setIsModalOpen(true)}
                 className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all"
                 title="Full Screen / Zoom"
@@ -150,15 +151,18 @@ export const ImagePreview: React.FC<Props> = ({ title, image }) => {
             </div>
           )}
         </div>
-        <div 
-          className="flex-1 p-4 flex items-center justify-center bg-gray-50/30 overflow-hidden cursor-zoom-in"
+        <div
+          className="flex-1 p-4 flex items-center justify-center bg-gray-50/30 overflow-hidden cursor-zoom-in relative"
           onClick={() => image && setIsModalOpen(true)}
         >
           {image ? (
-            <canvas 
-              ref={canvasRef} 
-              className="max-w-full max-h-full object-contain shadow-sm bg-white rounded-sm"
-            />
+            <div className="relative max-w-full max-h-full">
+              <canvas
+                ref={canvasRef}
+                className="max-w-full max-h-full object-contain shadow-sm bg-white rounded-sm"
+              />
+              {overlay}
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-2 text-gray-300">
               <div className="w-12 h-12 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center">
@@ -171,10 +175,10 @@ export const ImagePreview: React.FC<Props> = ({ title, image }) => {
       </div>
 
       {isModalOpen && image && (
-        <ImageViewerModal 
-          image={image} 
-          title={title} 
-          onClose={() => setIsModalOpen(false)} 
+        <ImageViewerModal
+          image={image}
+          title={title}
+          onClose={() => setIsModalOpen(false)}
         />
       )}
     </>

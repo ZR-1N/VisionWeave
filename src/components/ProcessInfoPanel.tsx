@@ -11,7 +11,7 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-4">
       <h3 className="font-semibold text-gray-800 mb-3">Process Details (Teaching Panel)</h3>
-      
+
       {mode === 'convolution' && (
         <div className="text-sm text-gray-600 space-y-2">
           <p><span className="font-medium text-gray-700">Kernel:</span> {params.kernelSize}x{params.kernelSize} matrix</p>
@@ -42,11 +42,16 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
 
       {mode === 'model' && (
         <div className="text-sm text-gray-600 space-y-2">
-          <p><span className="font-medium text-gray-700">Model:</span> Zero-DCE++</p>
-          <p><span className="font-medium text-gray-700">Task:</span> Low-Light Enhancement</p>
+          <p><span className="font-medium text-gray-700">Models:</span> DocTR (DBNet + CRNN) or Zero-DCE++</p>
+          <p><span className="font-medium text-gray-700">Task:</span> OCR & Text Analysis / Enhancement</p>
           <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-800 text-xs">
             <p className="font-medium mb-1">Deep Learning Inference:</p>
-            Uses a lightweight CNN to estimate pixel-wise curve parameters for light adjustment.
+            Uses pre-trained neural networks to detect text regions and recognize characters.
+            <ul className="list-disc ml-4 mt-1 space-y-1">
+              <li><strong>DBNet</strong>: Detects text bounding boxes.</li>
+              <li><strong>CRNN</strong>: Recognizes text inside boxes using CTC decoding.</li>
+              <li><strong>Privacy</strong>: All processing happens locally on your GPU.</li>
+            </ul>
           </div>
         </div>
       )}

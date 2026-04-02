@@ -8,11 +8,13 @@ import { ImagePreview } from './components/ImagePreview';
 import { ImageCompareSlider } from './components/ImageCompareSlider';
 import { ProcessInfoPanel } from './components/ProcessInfoPanel';
 import { ModelSelector } from './components/ModelSelector';
-import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/image';
+import { OCRResultOverlay } from './components/OCRResultOverlay';
+import { ImageTensor, ConvolutionParams, NonLinearFilterParams, OCRResult } from './types/image';
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
 import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
 import { ModelEngine } from './core/models/modelEngine';
+import { OCREngine } from './core/models/ocrEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle, Columns, LayoutGrid } from 'lucide-react';
@@ -40,6 +42,7 @@ const defaultNonLinearParams: NonLinearFilterParams = {
 function App() {
   const [originalImage, setOriginalImage] = useState<ImageTensor | null>(null);
   const [resultImage, setResultImage] = useState<ImageTensor | null>(null);
+  const [ocrResults, setOcrResults] = useState<OCRResult[]>([]);
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
   const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear' | 'model'>('convolution');
@@ -55,6 +58,7 @@ function App() {
   const [filterEngine] = useState(() => new WebGPUConvolution());
   const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
   const [modelEngine] = useState(() => new ModelEngine());
+  const [ocrEngine] = useState(() => new OCREngine());
 
   useEffect(() => {
     const initGPU = async () => {
@@ -69,8 +73,11 @@ function App() {
       const nSupp = await nonLinearEngine.init();
       setWebgpuSupported(fSupp && nSupp);
 
-      const mSupp = await modelEngine.init();
-      setModelReady(mSupp);
+      const [mSupp, oSupp] = await Promise.all([
+        modelEngine.init(),
+        ocrEngine.init()
+      ]);
+      setModelReady(mSupp && oSupp);
     };
 
     initGPU().catch(err => {
@@ -128,26 +135,65 @@ function App() {
     }
   };
 
-  const handleModelApply = async () => {
+  const handleModelApply = async (modelType: string) => {
     setActiveMode('model');
     if (!originalImage) return;
     if (!modelReady) {
-      setError('Model not ready');
+      setError('Models not ready');
       return;
     }
 
     setIsProcessing(true);
     setError(null);
     setProcessingProgress(null);
+    setOcrResults([]);
+
     try {
-      const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
-      setResultImage(res.output);
-      setInferenceTime(res.inferenceTime);
+      const startTime = performance.now();
+      if (modelType === 'ocr') {
+        const results = await ocrEngine.runOCR(originalImage, (p) => setProcessingProgress(p));
+        setOcrResults(results);
+        setInferenceTime(performance.now() - startTime);
+      } else {
+        const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
+        setResultImage(res.output);
+        setInferenceTime(res.inferenceTime);
+      }
     } catch (err: any) {
       setError('Model inference failed: ' + err.message);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleRedact = (box: [number, number, number, number]) => {
+    if (!originalImage) return;
+
+    // Perform redaction on the current active image (resultImage or originalImage)
+    const targetImage = resultImage || originalImage;
+    const newData = new Uint8ClampedArray(targetImage.data);
+    const [x1, y1, x2, y2] = box;
+
+    for (let y = y1; y < y2; y++) {
+      for (let x = x1; x < x2; x++) {
+        const idx = (y * targetImage.width + x) * 4;
+        // Fill with black or white (simple privacy erase)
+        newData[idx] = 0;
+        newData[idx + 1] = 0;
+        newData[idx + 2] = 0;
+        newData[idx + 3] = 255;
+      }
+    }
+
+    setResultImage({ ...targetImage, data: newData });
+  };
+
+  const handleUpdateOCRText = (index: number, newText: string) => {
+    setOcrResults(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], text: newText };
+      return next;
+    });
   };
 
   const handleNonLinearApply = async (fParams: NonLinearFilterParams) => {
@@ -346,7 +392,19 @@ function App() {
                 </div>
                 <div className="flex flex-col gap-4 min-h-0">
                   <div className="flex-1 min-h-0">
-                    <ImagePreview title="Processed Output" image={resultImage} />
+                    <ImagePreview
+                      title="Processed Output"
+                      image={resultImage || (activeMode === 'model' ? originalImage : null)}
+                      overlay={ocrResults.length > 0 && originalImage && (
+                        <OCRResultOverlay
+                          results={ocrResults}
+                          imageWidth={originalImage.width}
+                          imageHeight={originalImage.height}
+                          onRedact={handleRedact}
+                          onUpdateText={handleUpdateOCRText}
+                        />
+                      )}
+                    />
                   </div>
                   <div className="shrink-0">
                     <ProcessInfoPanel

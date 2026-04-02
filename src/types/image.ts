@@ -35,3 +35,9 @@ export interface NonLinearFilterParams {
   constant?: number; // Constant for Adaptive Threshold
   amount?: number; // Amount for Detail Enhancement
 }
+
+export interface OCRResult {
+  box: [number, number, number, number]; // [x1, y1, x2, y2] relative to original image
+  text: string;
+  confidence: number;
+}
