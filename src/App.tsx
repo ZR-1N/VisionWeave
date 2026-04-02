@@ -11,6 +11,7 @@ import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/i
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
 import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
+import { ModelEngine } from './core/models/modelEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle } from 'lucide-react';
@@ -40,14 +41,17 @@ function App() {
   const [resultImage, setResultImage] = useState<ImageTensor | null>(null);
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
-  const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear'>('convolution');
+  const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear' | 'model'>('convolution');
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
+  const [modelReady, setModelReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inferenceTime, setInferenceTime] = useState<number | null>(null);
 
   const [filterEngine] = useState(() => new WebGPUConvolution());
   const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
+  const [modelEngine] = useState(() => new ModelEngine());
 
   useEffect(() => {
     const initGPU = async () => {
@@ -61,6 +65,9 @@ function App() {
       const fSupp = await filterEngine.init();
       const nSupp = await nonLinearEngine.init();
       setWebgpuSupported(fSupp && nSupp);
+
+      const mSupp = await modelEngine.init();
+      setModelReady(mSupp);
     };
 
     initGPU().catch(err => {
@@ -89,6 +96,7 @@ function App() {
 
     setIsProcessing(true);
     setError(null);
+    setInferenceTime(null);
 
     try {
       const start = performance.now();
@@ -96,15 +104,42 @@ function App() {
 
       if (activeMode === 'convolution') {
         result = await filterEngine.applyConvolution(originalImage, params);
-      } else {
+      } else if (activeMode === 'nonlinear') {
         result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
+      } else {
+        const res = await modelEngine.run(originalImage);
+        result = res.output;
+        setInferenceTime(res.inferenceTime);
       }
 
       const end = performance.now();
+      if (activeMode !== 'model') setInferenceTime(end - start);
+
       console.log(`${activeMode} took ${end - start}ms`);
       setResultImage(result);
     } catch (err: any) {
       setError('Processing failed: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleModelApply = async () => {
+    setActiveMode('model');
+    if (!originalImage) return;
+    if (!modelReady) {
+      setError('Model not ready');
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const res = await modelEngine.run(originalImage);
+      setResultImage(res.output);
+      setInferenceTime(res.inferenceTime);
+    } catch (err: any) {
+      setError('Model inference failed: ' + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -205,7 +240,11 @@ function App() {
             />
           </div>
 
-          <ModelSelector />
+          <ModelSelector
+            onApply={handleModelApply}
+            isProcessing={isProcessing && activeMode === 'model'}
+            active={activeMode === 'model'}
+          />
         </div>
 
         {/* Middle Column: Original Image */}
@@ -231,7 +270,8 @@ function App() {
               ) : (
                 <Play className="w-5 h-5" />
               )}
-              {activeMode === 'convolution' ? 'Apply Convolution' : 'Apply Non-Linear Filter'}
+              {activeMode === 'convolution' ? 'Apply Convolution' :
+                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
             </button>
             <button
               onClick={handleDownload}
@@ -249,12 +289,23 @@ function App() {
             </div>
           )}
 
+          {inferenceTime && (
+            <div className="mb-4 flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs">
+              <span className="font-medium">Execution Time:</span>
+              <span className="font-mono">{inferenceTime.toFixed(2)} ms</span>
+            </div>
+          )}
+
           <div className="flex-1 min-h-0">
             <ImagePreview title="Result Image" image={resultImage} />
           </div>
 
           <div className="mt-4">
-            <ProcessInfoPanel params={params} />
+            <ProcessInfoPanel 
+              params={params} 
+              nonLinearParams={nonLinearParams}
+              mode={activeMode}
+            />
           </div>
         </div>
       </main>

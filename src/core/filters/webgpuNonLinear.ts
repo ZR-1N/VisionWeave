@@ -87,7 +87,7 @@ export class WebGPUNonLinearFilter {
     // } -> 12 * 4 = 48 bytes
     const paramsArray = new ArrayBuffer(48);
     const paramsViewF32 = new Float32Array(paramsArray);
-
+    
     paramsViewF32[0] = input.width;
     paramsViewF32[1] = input.height;
     paramsViewF32[2] = input.width;

@@ -1,40 +1,55 @@
 import React from 'react';
-import { ConvolutionParams } from '../types/image';
+import { ConvolutionParams, NonLinearFilterParams } from '../types/image';
 
 interface Props {
   params: ConvolutionParams;
+  nonLinearParams: NonLinearFilterParams;
+  mode: 'convolution' | 'nonlinear' | 'model';
 }
 
-export const ProcessInfoPanel: React.FC<Props> = ({ params }) => {
+export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mode }) => {
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-4">
-      <h3 className="font-semibold text-gray-800 mb-3">Convolution Details (Teaching Panel)</h3>
+      <h3 className="font-semibold text-gray-800 mb-3">Process Details (Teaching Panel)</h3>
       
-      <div className="text-sm text-gray-600 space-y-2">
-        <p>
-          <span className="font-medium text-gray-700">Kernel:</span> {params.kernelSize}x{params.kernelSize} matrix
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Movement:</span> The window slides by <strong>{params.stride}</strong> pixel(s) at a time.
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Padding:</span> Added <strong>{params.padding}</strong> pixel(s) of empty space around the image borders.
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Normalization:</span> {params.normalize ? 'Enabled (sum of kernel weights is scaled to 1 to preserve brightness)' : 'Disabled'}
-        </p>
-        
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded text-blue-800">
-          <p className="font-medium mb-1">How it works:</p>
-          <p className="text-xs">
-            For each pixel in the output, the kernel matrix is placed over the corresponding region in the input image. 
-            Corresponding values are multiplied and then summed together (Dot Product). Finally, the Bias ({params.bias}) is added.
-          </p>
-          <p className="text-xs mt-2 italic text-blue-600/80">
-            * Animated sliding window and formula breakdowns will be available in future updates.
-          </p>
+      {mode === 'convolution' && (
+        <div className="text-sm text-gray-600 space-y-2">
+          <p><span className="font-medium text-gray-700">Kernel:</span> {params.kernelSize}x{params.kernelSize} matrix</p>
+          <p><span className="font-medium text-gray-700">Stride:</span> {params.stride}</p>
+          <p><span className="font-medium text-gray-700">Padding:</span> {params.padding}</p>
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded text-blue-800 text-xs">
+            <p className="font-medium mb-1">Linear Convolution:</p>
+            Each pixel is a weighted sum of its neighbors. $Output = \sum (Input \times Kernel) + Bias$.
+          </div>
         </div>
-      </div>
+      )}
+
+      {mode === 'nonlinear' && (
+        <div className="text-sm text-gray-600 space-y-2">
+          <p><span className="font-medium text-gray-700">Filter Type:</span> {nonLinearParams.type}</p>
+          <p><span className="font-medium text-gray-700">Radius:</span> {nonLinearParams.radius} (Window size: {2 * nonLinearParams.radius + 1}x{2 * nonLinearParams.radius + 1})</p>
+          <div className="mt-4 p-3 bg-purple-50 border border-purple-100 rounded text-purple-800 text-xs">
+            <p className="font-medium mb-1">Non-Linear Logic:</p>
+            {nonLinearParams.type === 'median' && "Sorts neighbor pixels and picks the middle value. Great for noise removal."}
+            {nonLinearParams.type === 'bilateral' && "Weights neighbors by both distance and color similarity. Preserves edges while smoothing."}
+            {nonLinearParams.type === 'dilation' && "Picks the maximum value in the window. Expands bright areas."}
+            {nonLinearParams.type === 'erosion' && "Picks the minimum value in the window. Expands dark areas."}
+            {nonLinearParams.type === 'adaptive_threshold' && "Binarizes pixel based on local mean. Handles uneven lighting."}
+            {nonLinearParams.type === 'detail_enhance' && "Amplifies the difference between pixel and local average."}
+          </div>
+        </div>
+      )}
+
+      {mode === 'model' && (
+        <div className="text-sm text-gray-600 space-y-2">
+          <p><span className="font-medium text-gray-700">Model:</span> Zero-DCE++</p>
+          <p><span className="font-medium text-gray-700">Task:</span> Low-Light Enhancement</p>
+          <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-800 text-xs">
+            <p className="font-medium mb-1">Deep Learning Inference:</p>
+            Uses a lightweight CNN to estimate pixel-wise curve parameters for light adjustment.
+          </div>
+        </div>
+      )}
     </div>
   );
 };

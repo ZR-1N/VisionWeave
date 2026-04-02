@@ -1,20 +1,38 @@
 import React from 'react';
 
-export const ModelSelector: React.FC = () => {
+interface Props {
+  onApply: () => void;
+  isProcessing: boolean;
+  active: boolean;
+}
+
+export const ModelSelector: React.FC<Props> = ({ onApply, isProcessing, active }) => {
   return (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-4 opacity-70">
+    <div className={`bg-white p-4 rounded-lg shadow-sm border mt-4 transition-all ${active ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200'
+      }`}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-800">AI Model Engine</h3>
-        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">Coming Soon</span>
+        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-medium">ONNX Ready</span>
       </div>
       <p className="text-sm text-gray-500 mb-3">
-        Future integration for lightweight on-device ML models (ONNX Runtime Web).
+        Zero-DCE++ for low-light enhancement.
       </p>
-      <select disabled className="w-full border border-gray-300 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
-        <option>Low-Light Enhancement (Placeholder)</option>
-        <option>Super Resolution (Placeholder)</option>
-        <option>Denoise (Placeholder)</option>
-      </select>
+
+      <div className="space-y-3">
+        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-gray-50 text-gray-700">
+          <option value="zero-dce++">Zero-DCE++ (Low-Light)</option>
+          <option disabled>Super Resolution (Coming Soon)</option>
+          <option disabled>Denoise (Coming Soon)</option>
+        </select>
+
+        <button
+          onClick={onApply}
+          disabled={isProcessing}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm py-2 rounded font-medium transition-colors"
+        >
+          {isProcessing ? 'Inference...' : 'Run Zero-DCE++'}
+        </button>
+      </div>
     </div>
   );
 };
