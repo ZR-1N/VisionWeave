@@ -191,10 +191,10 @@ function App() {
         )}
       </header>
 
-      <main className="flex-1 p-6 flex gap-6 overflow-hidden">
+      <main className="flex-1 p-6 flex gap-6 overflow-hidden bg-gray-50/50">
         {/* Left Column: Controls */}
-        <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2 pb-10 custom-scrollbar">
-          <PresetKernelSelector
+        <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2 pb-10 custom-scrollbar shrink-0">
+          <PresetKernelSelector 
             onSelect={(preset) => {
               setActiveMode('convolution');
               setParams(p => ({
@@ -203,11 +203,11 @@ function App() {
                 kernelSize: preset.size,
                 normalize: preset.normalize ?? p.normalize
               }));
-            }}
+            }} 
           />
-
-          <div className={activeMode === 'convolution' ? 'ring-2 ring-blue-500 rounded-lg p-1 transition-all' : ''}>
-            <KernelEditor
+          
+          <div className={activeMode === 'convolution' ? 'ring-2 ring-blue-500 rounded-xl p-1 transition-all bg-white shadow-sm' : ''}>
+            <KernelEditor 
               kernel={params.kernel}
               size={params.kernelSize}
               onChange={(k) => {
@@ -220,7 +220,7 @@ function App() {
               }}
             />
 
-            <ConvolutionControls
+            <ConvolutionControls 
               params={params}
               onChange={(p) => {
                 setActiveMode('convolution');
@@ -229,8 +229,8 @@ function App() {
             />
           </div>
 
-          <div className={activeMode === 'nonlinear' ? 'ring-2 ring-blue-500 rounded-lg p-1 transition-all' : ''}>
-            <NonLinearFilterSelector
+          <div className={activeMode === 'nonlinear' ? 'ring-2 ring-blue-500 rounded-xl p-1 transition-all bg-white shadow-sm' : ''}>
+            <NonLinearFilterSelector 
               params={nonLinearParams}
               onChange={(p) => {
                 setActiveMode('nonlinear');
@@ -240,72 +240,84 @@ function App() {
             />
           </div>
 
-          <ModelSelector
+          <ModelSelector 
             onApply={handleModelApply}
             isProcessing={isProcessing && activeMode === 'model'}
             active={activeMode === 'model'}
           />
         </div>
 
-        {/* Middle Column: Original Image */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="mb-4">
-            <ImageUploader onImageLoad={handleImageLoad} />
-          </div>
-          <div className="flex-1 min-h-0">
-            <ImagePreview title="Original Image" image={originalImage} />
-          </div>
-        </div>
-
-        {/* Right Column: Result & Info */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="mb-4 flex gap-3 h-[116px] items-end pb-1">
+        {/* Right Area: Previews and Info */}
+        <div className="flex-1 flex flex-col gap-6 min-w-0">
+          {/* Action Bar */}
+          <div className="flex gap-4 items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <button
               onClick={handleApply}
               disabled={!originalImage || isProcessing || !webgpuSupported}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 px-4 rounded-lg shadow transition-colors font-medium text-lg"
+              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 px-6 rounded-lg shadow-md transition-all font-semibold text-lg"
             >
               {isProcessing ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <Play className="w-5 h-5" />
+                <Play className="w-6 h-6" />
               )}
-              {activeMode === 'convolution' ? 'Apply Convolution' :
-                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
+              {activeMode === 'convolution' ? 'Apply Convolution' : 
+               activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
             </button>
             <button
               onClick={handleDownload}
               disabled={!resultImage}
-              className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white py-3 px-4 rounded-lg shadow transition-colors font-medium"
+              className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 disabled:bg-gray-100 disabled:text-gray-400 text-white py-3 px-6 rounded-lg shadow-md transition-all font-semibold"
               title="Download Result"
             >
-              <Download className="w-5 h-5" />
+              <Download className="w-6 h-6" />
+              Download
             </button>
           </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm">
-              {error}
+          {/* Status and Messages */}
+          {(error || inferenceTime) && (
+            <div className="flex flex-col gap-2">
+              {error && (
+                <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm flex items-center gap-2">
+                  <AlertTriangle size={18} />
+                  {error}
+                </div>
+              )}
+              {inferenceTime && (
+                <div className="flex items-center justify-between px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 text-sm shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Performance:</span>
+                    <span className="px-2 py-0.5 bg-blue-100 rounded-md font-mono font-bold">{inferenceTime.toFixed(2)} ms</span>
+                  </div>
+                  <span className="text-xs text-blue-500 opacity-80 uppercase tracking-wider font-bold">Inference Speed</span>
+                </div>
+              )}
             </div>
           )}
 
-          {inferenceTime && (
-            <div className="mb-4 flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs">
-              <span className="font-medium">Execution Time:</span>
-              <span className="font-mono">{inferenceTime.toFixed(2)} ms</span>
+          {/* Image Grid */}
+          <div className="flex-1 grid grid-cols-2 gap-6 min-h-0">
+            <div className="flex flex-col gap-4 min-h-0">
+              <div className="shrink-0">
+                <ImageUploader onImageLoad={handleImageLoad} />
+              </div>
+              <div className="flex-1 min-h-0">
+                <ImagePreview title="Input Source" image={originalImage} />
+              </div>
             </div>
-          )}
-
-          <div className="flex-1 min-h-0">
-            <ImagePreview title="Result Image" image={resultImage} />
-          </div>
-
-          <div className="mt-4">
-            <ProcessInfoPanel 
-              params={params} 
-              nonLinearParams={nonLinearParams}
-              mode={activeMode}
-            />
+            <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex-1 min-h-0">
+                <ImagePreview title="Processed Output" image={resultImage} />
+              </div>
+              <div className="shrink-0">
+                <ProcessInfoPanel 
+                  params={params} 
+                  nonLinearParams={nonLinearParams}
+                  mode={activeMode}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </main>

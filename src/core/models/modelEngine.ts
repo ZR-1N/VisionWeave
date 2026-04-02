@@ -37,21 +37,21 @@ export class ModelEngine {
     }
 
     const startTime = performance.now();
-    
-    // Pre-process: ImageData -> NCHW Float32 Tensor
-    const inputTensor = preprocess(input);
-    
+
+    // Pre-process: ImageData -> NCHW Float32 Tensor (with safety resize)
+    const { tensor: inputTensor, resizedWidth, resizedHeight } = preprocess(input);
+
     // Run inference
     const feeds: Record<string, ort.Tensor> = {
       input: inputTensor,
     };
-    
+
     const results = await this.session.run(feeds);
     const outputTensor = results.output; // Zero-DCE++ output name is 'output'
-    
+
     // Post-process: NCHW Float32 Tensor -> RGBA ImageTensor
-    const output = postprocess(outputTensor, input.width, input.height);
-    
+    const output = postprocess(outputTensor, resizedWidth, resizedHeight);
+
     const endTime = performance.now();
     const inferenceTime = endTime - startTime;
 
