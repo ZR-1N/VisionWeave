@@ -42,15 +42,31 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
 
       {mode === 'model' && (
         <div className="text-sm text-gray-600 space-y-2">
-          <p><span className="font-medium text-gray-700">Models:</span> DocTR (DBNet + CRNN) or Zero-DCE++</p>
-          <p><span className="font-medium text-gray-700">Task:</span> OCR & Text Analysis / Enhancement</p>
+          <p><span className="font-medium text-gray-700">模型:</span> DocTR (DBNet + CRNN) 或 Zero-DCE++</p>
+          <p><span className="font-medium text-gray-700">任务:</span> 文字识别与分析 / 低光增强</p>
+          
           <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-800 text-xs">
-            <p className="font-medium mb-1">Deep Learning Inference:</p>
-            Uses pre-trained neural networks to detect text regions and recognize characters.
-            <ul className="list-disc ml-4 mt-1 space-y-1">
-              <li><strong>DBNet</strong>: Detects text bounding boxes.</li>
-              <li><strong>CRNN</strong>: Recognizes text inside boxes using CTC decoding.</li>
-              <li><strong>Privacy</strong>: All processing happens locally on your GPU.</li>
+            <p className="font-medium mb-1">使用说明 (OCR):</p>
+            <ol className="list-decimal ml-4 space-y-1">
+              <li>在下拉菜单选择 <strong>DocTR</strong>。</li>
+              <li>点击 <strong>Run DocTR OCR</strong> 开始本地识别。</li>
+              <li>识别完成后，鼠标<strong>悬停</strong>在图片上的蓝色框。</li>
+              <li>在工具条中选择：
+                <ul className="list-disc ml-4 mt-1">
+                  <li><strong>复制</strong>: 将文字存入剪贴板。</li>
+                  <li><strong>修改</strong>: 修正识别错误的文字。</li>
+                  <li><strong>擦除</strong>: 黑色遮盖敏感信息 (隐私脱敏)。</li>
+                </ul>
+              </li>
+            </ol>
+          </div>
+
+          <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded text-gray-600 text-[10px]">
+            <p className="font-medium mb-1">深度学习原理:</p>
+            <ul className="list-disc ml-4 space-y-1">
+              <li><strong>DBNet</strong>: 像素级预测文本概率图，提取文字区域。</li>
+              <li><strong>CRNN</strong>: 结合 CNN 和 LSTM，对裁剪后的文字行进行序列识别。</li>
+              <li><strong>隐私安全</strong>: 所有的推理过程完全在您的本地显卡上运行，图片不会上传服务器。</li>
             </ul>
           </div>
         </div>

@@ -26,10 +26,10 @@ export const ModelSelector: React.FC<Props> = ({ onApply, isProcessing, active }
           onChange={(e) => setSelectedModel(e.target.value)}
           className="w-full border border-gray-300 rounded p-2 text-sm bg-gray-50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="zero-dce++">Zero-DCE++ (Low-Light)</option>
-          <option value="ocr">DocTR (OCR & Redaction)</option>
-          <option disabled>Super Resolution (Coming Soon)</option>
-          <option disabled>Denoise (Coming Soon)</option>
+          <option value="zero-dce++">Zero-DCE++ (低光增强)</option>
+          <option value="ocr">DocTR (OCR & 隐私擦除)</option>
+          <option disabled>超分辨率 (开发中)</option>
+          <option disabled>图像降噪 (开发中)</option>
         </select>
 
         <button
@@ -37,7 +37,7 @@ export const ModelSelector: React.FC<Props> = ({ onApply, isProcessing, active }
           disabled={isProcessing}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm py-2 rounded font-medium transition-colors"
         >
-          {isProcessing ? 'Inference...' : `Run ${selectedModel === 'ocr' ? 'DocTR OCR' : 'Zero-DCE++'}`}
+          {isProcessing ? '正在处理...' : `运行 ${selectedModel === 'ocr' ? 'OCR 识别' : '增强模型'}`}
         </button>
       </div>
     </div>
