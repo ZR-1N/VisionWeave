@@ -5,6 +5,7 @@ import { ConvolutionControls } from './components/ConvolutionControls';
 import { PresetKernelSelector } from './components/PresetKernelSelector';
 import { NonLinearFilterSelector } from './components/NonLinearFilterSelector';
 import { ImagePreview } from './components/ImagePreview';
+import { ImageCompareSlider } from './components/ImageCompareSlider';
 import { ProcessInfoPanel } from './components/ProcessInfoPanel';
 import { ModelSelector } from './components/ModelSelector';
 import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/image';
@@ -14,7 +15,7 @@ import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
 import { ModelEngine } from './core/models/modelEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
-import { Play, Download, AlertTriangle } from 'lucide-react';
+import { Play, Download, AlertTriangle, Columns, LayoutGrid } from 'lucide-react';
 import { KERNEL_PRESETS } from './core/filters/presets';
 
 const defaultParams: ConvolutionParams = {
@@ -46,6 +47,7 @@ function App() {
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
   const [modelReady, setModelReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inferenceTime, setInferenceTime] = useState<number | null>(null);
@@ -254,6 +256,23 @@ function App() {
         <div className="flex-1 flex flex-col gap-6 min-w-0">
           {/* Action Bar */}
           <div className="flex gap-4 items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex bg-gray-100 p-1 rounded-lg mr-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Grid View"
+              >
+                <LayoutGrid size={20} />
+              </button>
+              <button
+                onClick={() => setViewMode('split')}
+                className={`p-2 rounded-md transition-all ${viewMode === 'split' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Split View"
+              >
+                <Columns size={20} />
+              </button>
+            </div>
+
             <button
               onClick={handleApply}
               disabled={!originalImage || isProcessing || !webgpuSupported}
@@ -313,28 +332,59 @@ function App() {
             </div>
           )}
 
-          {/* Image Grid */}
-          <div className="flex-1 grid grid-cols-2 gap-6 min-h-0">
-            <div className="flex flex-col gap-4 min-h-0">
-              <div className="shrink-0">
-                <ImageUploader onImageLoad={handleImageLoad} />
+          {/* Image Area */}
+          <div className="flex-1 min-h-0">
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-2 gap-6 h-full">
+                <div className="flex flex-col gap-4 min-h-0">
+                  <div className="shrink-0">
+                    <ImageUploader onImageLoad={handleImageLoad} />
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <ImagePreview title="Input Source" image={originalImage} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4 min-h-0">
+                  <div className="flex-1 min-h-0">
+                    <ImagePreview title="Processed Output" image={resultImage} />
+                  </div>
+                  <div className="shrink-0">
+                    <ProcessInfoPanel
+                      params={params}
+                      nonLinearParams={nonLinearParams}
+                      mode={activeMode}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 min-h-0">
-                <ImagePreview title="Input Source" image={originalImage} />
+            ) : (
+              <div className="flex flex-col gap-6 h-full">
+                {originalImage && resultImage ? (
+                  <div className="flex-1 min-h-0">
+                    <ImageCompareSlider original={originalImage} processed={resultImage} />
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-xl border border-dashed border-gray-300 text-gray-400 gap-4">
+                    <div className="text-center">
+                      <p className="font-medium text-gray-600">Split-View requires both input and output</p>
+                      <p className="text-sm">Upload an image and apply a filter to enable this view.</p>
+                    </div>
+                    {!originalImage && (
+                      <div className="w-64">
+                        <ImageUploader onImageLoad={handleImageLoad} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="shrink-0">
+                  <ProcessInfoPanel
+                    params={params}
+                    nonLinearParams={nonLinearParams}
+                    mode={activeMode}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col gap-4 min-h-0">
-              <div className="flex-1 min-h-0">
-                <ImagePreview title="Processed Output" image={resultImage} />
-              </div>
-              <div className="shrink-0">
-                <ProcessInfoPanel
-                  params={params}
-                  nonLinearParams={nonLinearParams}
-                  mode={activeMode}
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </main>
