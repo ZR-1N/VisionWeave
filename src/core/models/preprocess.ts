@@ -3,40 +3,12 @@ import { ImageTensor } from '../../types/image';
 
 /**
  * Preprocess: ImageData (RGBA) -> Float32 Tensor (NCHW, normalized to [0, 1], RGB)
- * Includes a safety resize step for very large images to prevent WebGPU memory overflow.
  */
-export function preprocess(input: ImageTensor): { tensor: ort.Tensor; resizedWidth: number; resizedHeight: number } {
-  const MAX_AI_DIMENSION = 1280; // Safety limit for WebGPU VRAM
-  let { width, height, data } = input;
+export function preprocess(input: ImageTensor): ort.Tensor {
+  const { width, height, data } = input;
+  const size = width * height;
 
-  let targetWidth = width;
-  let targetHeight = height;
-
-  // 1. Calculate safety dimensions
-  if (width > MAX_AI_DIMENSION || height > MAX_AI_DIMENSION) {
-    const ratio = Math.min(MAX_AI_DIMENSION / width, MAX_AI_DIMENSION / height);
-    targetWidth = Math.floor(width * ratio);
-    targetHeight = Math.floor(height * ratio);
-
-    // Perform resize using an offscreen canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext('2d')!;
-
-    // Draw original data to canvas then get resized data
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    tempCanvas.getContext('2d')!.putImageData(new ImageData(data, width, height), 0, 0);
-
-    ctx.drawImage(tempCanvas, 0, 0, width, height, 0, 0, targetWidth, targetHeight);
-    data = new Uint8ClampedArray(ctx.getImageData(0, 0, targetWidth, targetHeight).data.buffer);
-  }
-
-  const size = targetWidth * targetHeight;
   const float32Data = new Float32Array(3 * size);
-
   const rOffset = 0;
   const gOffset = size;
   const bOffset = 2 * size;
@@ -48,6 +20,23 @@ export function preprocess(input: ImageTensor): { tensor: ort.Tensor; resizedWid
     float32Data[bOffset + i] = data[rgbaIndex + 2] / 255.0;
   }
 
-  const tensor = new ort.Tensor('float32', float32Data, [1, 3, targetHeight, targetWidth]);
-  return { tensor, resizedWidth: targetWidth, resizedHeight: targetHeight };
+  return new ort.Tensor('float32', float32Data, [1, 3, height, width]);
+}
+
+/**
+ * Extracts a sub-region (tile) from an ImageTensor
+ */
+export function extractTile(input: ImageTensor, x: number, y: number, w: number, h: number): ImageTensor {
+  const tileData = new Uint8ClampedArray(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    const srcRow = y + row;
+    const srcOffset = (srcRow * input.width + x) * 4;
+    const destOffset = row * w * 4;
+
+    // Boundary check for safety
+    if (srcRow >= 0 && srcRow < input.height) {
+      tileData.set(input.data.subarray(srcOffset, srcOffset + w * 4), destOffset);
+    }
+  }
+  return { width: w, height: h, channels: 4, data: tileData };
 }

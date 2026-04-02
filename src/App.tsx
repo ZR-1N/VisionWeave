@@ -46,6 +46,7 @@ function App() {
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
   const [modelReady, setModelReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inferenceTime, setInferenceTime] = useState<number | null>(null);
 
@@ -97,6 +98,7 @@ function App() {
     setIsProcessing(true);
     setError(null);
     setInferenceTime(null);
+    setProcessingProgress(null);
 
     try {
       const start = performance.now();
@@ -107,7 +109,7 @@ function App() {
       } else if (activeMode === 'nonlinear') {
         result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
       } else {
-        const res = await modelEngine.run(originalImage);
+        const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
         result = res.output;
         setInferenceTime(res.inferenceTime);
       }
@@ -134,8 +136,9 @@ function App() {
 
     setIsProcessing(true);
     setError(null);
+    setProcessingProgress(null);
     try {
-      const res = await modelEngine.run(originalImage);
+      const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
       setResultImage(res.output);
       setInferenceTime(res.inferenceTime);
     } catch (err: any) {
@@ -194,7 +197,7 @@ function App() {
       <main className="flex-1 p-6 flex gap-6 overflow-hidden bg-gray-50/50">
         {/* Left Column: Controls */}
         <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2 pb-10 custom-scrollbar shrink-0">
-          <PresetKernelSelector 
+          <PresetKernelSelector
             onSelect={(preset) => {
               setActiveMode('convolution');
               setParams(p => ({
@@ -203,11 +206,11 @@ function App() {
                 kernelSize: preset.size,
                 normalize: preset.normalize ?? p.normalize
               }));
-            }} 
+            }}
           />
-          
+
           <div className={activeMode === 'convolution' ? 'ring-2 ring-blue-500 rounded-xl p-1 transition-all bg-white shadow-sm' : ''}>
-            <KernelEditor 
+            <KernelEditor
               kernel={params.kernel}
               size={params.kernelSize}
               onChange={(k) => {
@@ -220,7 +223,7 @@ function App() {
               }}
             />
 
-            <ConvolutionControls 
+            <ConvolutionControls
               params={params}
               onChange={(p) => {
                 setActiveMode('convolution');
@@ -230,7 +233,7 @@ function App() {
           </div>
 
           <div className={activeMode === 'nonlinear' ? 'ring-2 ring-blue-500 rounded-xl p-1 transition-all bg-white shadow-sm' : ''}>
-            <NonLinearFilterSelector 
+            <NonLinearFilterSelector
               params={nonLinearParams}
               onChange={(p) => {
                 setActiveMode('nonlinear');
@@ -240,7 +243,7 @@ function App() {
             />
           </div>
 
-          <ModelSelector 
+          <ModelSelector
             onApply={handleModelApply}
             isProcessing={isProcessing && activeMode === 'model'}
             active={activeMode === 'model'}
@@ -261,8 +264,8 @@ function App() {
               ) : (
                 <Play className="w-6 h-6" />
               )}
-              {activeMode === 'convolution' ? 'Apply Convolution' : 
-               activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
+              {activeMode === 'convolution' ? 'Apply Convolution' :
+                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
             </button>
             <button
               onClick={handleDownload}
@@ -276,12 +279,26 @@ function App() {
           </div>
 
           {/* Status and Messages */}
-          {(error || inferenceTime) && (
+          {(error || inferenceTime || processingProgress) && (
             <div className="flex flex-col gap-2">
               {error && (
                 <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm flex items-center gap-2">
                   <AlertTriangle size={18} />
                   {error}
+                </div>
+              )}
+              {processingProgress !== null && processingProgress < 1 && (
+                <div className="px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <div className="flex justify-between items-center mb-1 text-xs text-indigo-700 font-bold uppercase tracking-wider">
+                    <span>Tiled Processing</span>
+                    <span>{Math.round(processingProgress * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-indigo-200 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-full transition-all duration-300 ease-out"
+                      style={{ width: `${processingProgress * 100}%` }}
+                    />
+                  </div>
                 </div>
               )}
               {inferenceTime && (
@@ -311,8 +328,8 @@ function App() {
                 <ImagePreview title="Processed Output" image={resultImage} />
               </div>
               <div className="shrink-0">
-                <ProcessInfoPanel 
-                  params={params} 
+                <ProcessInfoPanel
+                  params={params}
                   nonLinearParams={nonLinearParams}
                   mode={activeMode}
                 />
