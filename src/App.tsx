@@ -46,9 +46,10 @@ function App() {
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
   const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear' | 'model'>('convolution');
+  const [selectedModel, setSelectedModel] = useState<'zero-dce++' | 'ocr'>('zero-dce++');
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
-  const [modelReady, setModelReady] = useState(false);
+  const [modelReady, setModelReady] = useState({ zeroDce: false, ocr: false });
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
@@ -63,21 +64,20 @@ function App() {
   useEffect(() => {
     const initGPU = async () => {
       const gpuManager = GPUManager.getInstance();
-      const success = await gpuManager.init();
-      if (!success) {
+      const gpuSuccess = await gpuManager.init();
+      if (gpuSuccess) {
+        const fSupp = await filterEngine.init();
+        const nSupp = await nonLinearEngine.init();
+        setWebgpuSupported(fSupp && nSupp);
+      } else {
         setWebgpuSupported(false);
-        return;
       }
-
-      const fSupp = await filterEngine.init();
-      const nSupp = await nonLinearEngine.init();
-      setWebgpuSupported(fSupp && nSupp);
 
       const [mSupp, oSupp] = await Promise.all([
         modelEngine.init(),
         ocrEngine.init()
       ]);
-      setModelReady(mSupp && oSupp);
+      setModelReady({ zeroDce: mSupp, ocr: oSupp });
     };
 
     initGPU().catch(err => {
@@ -103,9 +103,18 @@ function App() {
 
   const handleApply = async () => {
     if (!originalImage) return;
-    if (!webgpuSupported) {
-      setError('WebGPU is not supported.');
-      return;
+
+    if (activeMode === 'convolution' || activeMode === 'nonlinear') {
+      if (!webgpuSupported) {
+        setError('WebGPU is not supported.');
+        return;
+      }
+    } else {
+      const ready = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+      if (!ready) {
+        setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -122,6 +131,11 @@ function App() {
         result = await filterEngine.applyConvolution(originalImage, params);
       } else if (activeMode === 'nonlinear') {
         result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
+      } else if (selectedModel === 'ocr') {
+        const results = await ocrEngine.runOCR(originalImage, (p) => setProcessingProgress(p));
+        setOcrResults(results);
+        result = originalImage;
+        setInferenceTime(performance.now() - start);
       } else {
         const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
         result = res.output;
@@ -141,11 +155,14 @@ function App() {
     }
   };
 
-  const handleModelApply = async (modelType: string) => {
+  const handleModelApply = async (modelType: 'zero-dce++' | 'ocr') => {
+    setSelectedModel(modelType);
     setActiveMode('model');
     if (!originalImage) return;
-    if (!modelReady) {
-      setError('Models not ready');
+
+    const ready = modelType === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+    if (!ready) {
+      setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
       return;
     }
 
@@ -301,6 +318,12 @@ function App() {
 
           <ModelSelector
             onApply={handleModelApply}
+            selectedModel={selectedModel}
+            onModelChange={(modelType) => {
+              setSelectedModel(modelType);
+              setActiveMode('model');
+            }}
+            modelReady={modelReady}
             isProcessing={isProcessing && activeMode === 'model'}
             active={activeMode === 'model'}
           />
@@ -327,9 +350,15 @@ function App() {
               </button>
             </div>
 
+            {(() => {
+              const selectedReady = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+              const disabledByMode = activeMode === 'convolution' || activeMode === 'nonlinear'
+                ? !webgpuSupported
+                : !selectedReady;
+              return (
             <button
               onClick={handleApply}
-              disabled={!originalImage || isProcessing || !webgpuSupported}
+              disabled={!originalImage || isProcessing || disabledByMode}
               className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 px-6 rounded-lg shadow-md transition-all font-semibold text-lg"
             >
               {isProcessing ? (
@@ -338,8 +367,11 @@ function App() {
                 <Play className="w-6 h-6" />
               )}
               {activeMode === 'convolution' ? 'Apply Convolution' :
-                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' : 'Run AI Model'}
+                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' :
+                  selectedModel === 'ocr' ? 'Run DocTR OCR' : 'Run Zero-DCE++'}
             </button>
+              );
+            })()}
             <button
               onClick={handleDownload}
               disabled={!resultImage}
