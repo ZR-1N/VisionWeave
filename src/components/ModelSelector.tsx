@@ -8,6 +8,14 @@ interface Props {
     zeroDce: boolean;
     ocr: boolean;
   };
+  modelLoading: {
+    zeroDce: boolean;
+    ocr: boolean;
+  };
+  modelInitError: {
+    zeroDce: string | null;
+    ocr: string | null;
+  };
   isProcessing: boolean;
   active: boolean;
 }
@@ -17,18 +25,33 @@ export const ModelSelector: React.FC<Props> = ({
   selectedModel,
   onModelChange,
   modelReady,
+  modelLoading,
+  modelInitError,
   isProcessing,
   active,
 }) => {
   const selectedReady = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+  const selectedLoading = selectedModel === 'ocr' ? modelLoading.ocr : modelLoading.zeroDce;
+  const selectedError = selectedModel === 'ocr' ? modelInitError.ocr : modelInitError.zeroDce;
+
+  const statusClass = selectedReady
+    ? 'bg-green-100 text-green-800'
+    : selectedLoading
+      ? 'bg-amber-100 text-amber-800'
+      : 'bg-red-100 text-red-800';
+  const statusLabel = selectedReady
+    ? 'ONNX Ready'
+    : selectedLoading
+      ? 'Model Loading'
+      : 'Model Failed';
 
   return (
     <div className={`bg-white p-4 rounded-lg shadow-sm border mt-4 transition-all ${active ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200'
       }`}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-800">AI Model Engine</h3>
-        <span className={`text-xs px-2 py-0.5 rounded font-medium ${selectedReady ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-          {selectedReady ? 'ONNX Ready' : 'Model Loading'}
+        <span className={`text-xs px-2 py-0.5 rounded font-medium ${statusClass}`}>
+          {statusLabel}
         </span>
       </div>
       <p className="text-sm text-gray-500 mb-3">
@@ -54,6 +77,12 @@ export const ModelSelector: React.FC<Props> = ({
         >
           {isProcessing ? '正在处理...' : `运行 ${selectedModel === 'ocr' ? 'OCR 识别' : '增强模型'}`}
         </button>
+
+        {!selectedReady && !selectedLoading && selectedError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded p-2">
+            {selectedError}
+          </p>
+        )}
       </div>
     </div>
   );

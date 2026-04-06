@@ -50,6 +50,11 @@ function App() {
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
   const [modelReady, setModelReady] = useState({ zeroDce: false, ocr: false });
+  const [modelLoading, setModelLoading] = useState({ zeroDce: true, ocr: true });
+  const [modelInitError, setModelInitError] = useState<{ zeroDce: string | null; ocr: string | null }>({
+    zeroDce: null,
+    ocr: null,
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
@@ -62,6 +67,50 @@ function App() {
   const [ocrEngine] = useState(() => new OCREngine());
 
   useEffect(() => {
+    const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error(`${label} initialization timed out after ${Math.round(ms / 1000)}s`));
+        }, ms);
+
+        promise
+          .then((value) => {
+            window.clearTimeout(timer);
+            resolve(value);
+          })
+          .catch((err) => {
+            window.clearTimeout(timer);
+            reject(err);
+          });
+      });
+    };
+
+    const initModel = async (
+      key: 'zeroDce' | 'ocr',
+      label: 'Zero-DCE++' | 'DocTR',
+      initFn: () => Promise<boolean>
+    ) => {
+      setModelLoading((prev) => ({ ...prev, [key]: true }));
+      setModelInitError((prev) => ({ ...prev, [key]: null }));
+
+      try {
+        const ok = await withTimeout(initFn(), key === 'ocr' ? 90000 : 30000, label);
+        setModelReady((prev) => ({ ...prev, [key]: ok }));
+        if (!ok) {
+          setModelInitError((prev) => ({
+            ...prev,
+            [key]: `${label} failed to initialize`,
+          }));
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        setModelReady((prev) => ({ ...prev, [key]: false }));
+        setModelInitError((prev) => ({ ...prev, [key]: message }));
+      } finally {
+        setModelLoading((prev) => ({ ...prev, [key]: false }));
+      }
+    };
+
     const initGPU = async () => {
       const gpuManager = GPUManager.getInstance();
       const gpuSuccess = await gpuManager.init();
@@ -73,11 +122,10 @@ function App() {
         setWebgpuSupported(false);
       }
 
-      const [mSupp, oSupp] = await Promise.all([
-        modelEngine.init(),
-        ocrEngine.init()
+      await Promise.all([
+        initModel('zeroDce', 'Zero-DCE++', () => modelEngine.init()),
+        initModel('ocr', 'DocTR', () => ocrEngine.init()),
       ]);
-      setModelReady({ zeroDce: mSupp, ocr: oSupp });
     };
 
     initGPU().catch(err => {
@@ -111,8 +159,16 @@ function App() {
       }
     } else {
       const ready = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+      const loading = selectedModel === 'ocr' ? modelLoading.ocr : modelLoading.zeroDce;
+      const initError = selectedModel === 'ocr' ? modelInitError.ocr : modelInitError.zeroDce;
       if (!ready) {
-        setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+        if (loading) {
+          setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is still loading`);
+        } else if (initError) {
+          setError(initError);
+        } else {
+          setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+        }
         return;
       }
     }
@@ -161,8 +217,16 @@ function App() {
     if (!originalImage) return;
 
     const ready = modelType === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+    const loading = modelType === 'ocr' ? modelLoading.ocr : modelLoading.zeroDce;
+    const initError = modelType === 'ocr' ? modelInitError.ocr : modelInitError.zeroDce;
     if (!ready) {
-      setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+      if (loading) {
+        setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is still loading`);
+      } else if (initError) {
+        setError(initError);
+      } else {
+        setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+      }
       return;
     }
 
@@ -324,6 +388,8 @@ function App() {
               setActiveMode('model');
             }}
             modelReady={modelReady}
+            modelLoading={modelLoading}
+            modelInitError={modelInitError}
             isProcessing={isProcessing && activeMode === 'model'}
             active={activeMode === 'model'}
           />
