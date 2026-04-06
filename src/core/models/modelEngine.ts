@@ -61,10 +61,10 @@ export class ModelEngine {
     for (let ty = 0; ty < tilesY; ty++) {
       for (let tx = 0; tx < tilesX; tx++) {
         // Calculate tile boundaries
-        let x = tx * stride;
-        let y = ty * stride;
-        let w = Math.min(TILE_SIZE, width - x);
-        let h = Math.min(TILE_SIZE, height - y);
+        const x = tx * stride;
+        const y = ty * stride;
+        const w = Math.min(TILE_SIZE, width - x);
+        const h = Math.min(TILE_SIZE, height - y);
 
         // Extract and process tile
         const tileInput = extractTile(input, x, y, w, h);

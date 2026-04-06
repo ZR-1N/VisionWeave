@@ -18,19 +18,75 @@ export class OCREngine {
   private recoModelPath = '/models/doctr/crnn_mobilenet_v3_small.onnx';
   private vocabPath = '/models/doctr/vocab.json';
 
+  private getInputName(session: ort.InferenceSession): string {
+    return session.inputNames[0] ?? 'input';
+  }
+
+  private getOutputTensor(results: ort.InferenceSession.ReturnType, preferredKey?: string): ort.Tensor {
+    if (preferredKey && preferredKey in results) {
+      return results[preferredKey] as ort.Tensor;
+    }
+
+    const first = Object.values(results)[0] as ort.Tensor | undefined;
+    if (!first) {
+      throw new Error('ONNX inference returned no outputs');
+    }
+    return first;
+  }
+
+  private toHeatmap(tensor: ort.Tensor): { heatmap: Float32Array; w: number; h: number } {
+    const dims = tensor.dims as number[];
+    if (dims.length < 2) {
+      throw new Error(`Unexpected detection output dims: [${dims.join(', ')}]`);
+    }
+
+    const h = dims[dims.length - 2];
+    const w = dims[dims.length - 1];
+    const size = h * w;
+    const data = tensor.data as Float32Array;
+
+    if (data.length < size) {
+      throw new Error(`Detection output too small: got ${data.length}, expected at least ${size}`);
+    }
+
+    // DBNet output is usually [1, 1, H, W], we take the first map.
+    return { heatmap: data.subarray(0, size), w, h };
+  }
+
+  private async createSessionWithFallback(modelPath: string): Promise<ort.InferenceSession> {
+    try {
+      return await ort.InferenceSession.create(modelPath, {
+        executionProviders: ['webgpu'],
+      });
+    } catch (webgpuErr) {
+      console.warn(`WebGPU init failed for ${modelPath}, falling back to WASM`, webgpuErr);
+      return await ort.InferenceSession.create(modelPath, {
+        executionProviders: ['wasm'],
+      });
+    }
+  }
+
   async init(): Promise<boolean> {
     try {
       // 1. Load Vocabulary
       const response = await fetch(this.vocabPath);
-      this.vocab = await response.json();
+      if (!response.ok) {
+        throw new Error(`Failed to load OCR vocab: ${response.status}`);
+      }
+
+      const vocab = await response.json();
+      if (!Array.isArray(vocab) || vocab.length === 0) {
+        throw new Error('OCR vocab is invalid or empty');
+      }
+      this.vocab = vocab as string[];
 
       // 2. Initialize Sessions
-      const options: ort.InferenceSession.SessionOptions = {
-        executionProviders: ['webgpu'],
-      };
-
-      this.detSession = await ort.InferenceSession.create(this.detModelPath, options);
-      this.recoSession = await ort.InferenceSession.create(this.recoModelPath, options);
+      const [detSession, recoSession] = await Promise.all([
+        this.createSessionWithFallback(this.detModelPath),
+        this.createSessionWithFallback(this.recoModelPath),
+      ]);
+      this.detSession = detSession;
+      this.recoSession = recoSession;
 
       console.log('OCR Engine (Detection + Recognition) initialized');
       return true;
@@ -45,17 +101,24 @@ export class OCREngine {
 
     // --- STEP 1: Detection ---
     const { tensor: detTensor, scale, padding } = preprocessDetection(input);
-    const detResults = await this.detSession.run({ input: detTensor });
-    const heatmap = detResults.out_map.data as Float32Array;
-    const [h, w] = [640, 640];
+    const detInputName = this.getInputName(this.detSession);
+    const detResults = await this.detSession.run({ [detInputName]: detTensor });
+    const detOutput = this.getOutputTensor(detResults, 'out_map');
+    const { heatmap, h, w } = this.toHeatmap(detOutput);
+    if (onProgress) onProgress(0.2);
 
     // --- STEP 2: Box Extraction (Simplified Connected Components) ---
     // In a real scenario, we'd use a more robust box detection logic.
     // For MVP, we'll find high-confidence clusters.
     const boxes = this.extractBoxes(heatmap, w, h, scale, padding, input.width, input.height);
+    if (boxes.length === 0) {
+      if (onProgress) onProgress(1);
+      return [];
+    }
     
     // --- STEP 3: Recognition ---
     const results: OCRResult[] = [];
+    const recoInputName = this.getInputName(this.recoSession);
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
       // Crop the word from the original image
@@ -66,20 +129,29 @@ export class OCREngine {
       const tile = extractTile(input, x1, y1, cropW, cropH);
       const recoTensor = this.preprocessRecognition(tile);
       
-      const recoResults = await this.recoSession.run({ input: recoTensor });
-      const logits = recoResults.logits.data as Float32Array;
-      const text = decodeCTC(logits, recoResults.logits.dims as number[], this.vocab);
+      const recoResults = await this.recoSession.run({ [recoInputName]: recoTensor });
+      const recoOutput = this.getOutputTensor(recoResults, 'logits');
+      const logits = recoOutput.data as Float32Array;
+      const text = decodeCTC(logits, recoOutput.dims as number[], this.vocab);
       
-      results.push({ box, text, confidence: 0.9 }); // Confidence is placeholder
+      if (text.length > 0) {
+        results.push({ box, text, confidence: 0.9 }); // Confidence is placeholder
+      }
       
-      if (onProgress) onProgress((i + 1) / boxes.length);
+      if (onProgress) {
+        const recogProgress = (i + 1) / boxes.length;
+        onProgress(0.2 + recogProgress * 0.8);
+      }
     }
 
+    if (onProgress) onProgress(1);
     return results;
   }
 
   private extractBoxes(heatmap: Float32Array, w: number, h: number, scale: number, padding: { x: number, y: number }, origW: number, origH: number): [number, number, number, number][] {
     const threshold = 0.3;
+    const minPixels = 20;
+    const maxBoxes = 200;
     const boxes: [number, number, number, number][] = [];
     const visited = new Uint8Array(w * h);
 
@@ -90,10 +162,13 @@ export class OCREngine {
         if (heatmap[idx] > threshold && !visited[idx]) {
           let minX = x, maxX = x, minY = y, maxY = y;
           const queue = [[x, y]];
+          let qHead = 0;
+          let pixels = 0;
           visited[idx] = 1;
 
-          while (queue.length > 0) {
-            const [cx, cy] = queue.shift()!;
+          while (qHead < queue.length) {
+            const [cx, cy] = queue[qHead++];
+            pixels++;
             minX = Math.min(minX, cx); maxX = Math.max(maxX, cx);
             minY = Math.min(minY, cy); maxY = Math.max(maxY, cy);
 
@@ -116,18 +191,23 @@ export class OCREngine {
           const by2 = Math.ceil((maxY - padding.y) / scale);
 
           // Filtering tiny boxes
-          if ((bx2 - bx1) > 4 && (by2 - by1) > 4) {
-            boxes.push([
-              Math.max(0, bx1), 
-              Math.max(0, by1), 
-              Math.min(origW, bx2), 
-              Math.min(origH, by2)
-            ]);
+          if (pixels >= minPixels && (bx2 - bx1) > 4 && (by2 - by1) > 4) {
+            const x1 = Math.max(0, bx1);
+            const y1 = Math.max(0, by1);
+            const x2 = Math.min(origW, bx2);
+            const y2 = Math.min(origH, by2);
+
+            if (x2 > x1 && y2 > y1) {
+              boxes.push([x1, y1, x2, y2]);
+            }
           }
         }
       }
     }
-    return boxes;
+
+    // Keep ordering stable for UI overlay and avoid pathological counts.
+    boxes.sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
+    return boxes.slice(0, maxBoxes);
   }
 
   private preprocessRecognition(tile: ImageTensor): ort.Tensor {

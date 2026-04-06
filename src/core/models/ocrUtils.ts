@@ -57,11 +57,23 @@ export function preprocessDetection(input: ImageTensor): { tensor: ort.Tensor; s
  * CTC Greedy Decoder for Recognition
  */
 export function decodeCTC(logits: Float32Array, shape: number[], vocab: string[]): string {
-  const [batch, seqLen, numClasses] = shape;
-  let decoded = "";
+  let seqLen = 0;
+  let numClasses = 0;
+
+  if (shape.length === 3) {
+    seqLen = shape[1];
+    numClasses = shape[2];
+  } else if (shape.length === 2) {
+    seqLen = shape[0];
+    numClasses = shape[1];
+  } else {
+    throw new Error(`Unexpected logits shape for CTC decode: [${shape.join(', ')}]`);
+  }
+
+  let decoded = '';
   let lastCharIdx = -1;
 
-  for (let t = 0; lastCharIdx !== -2 && t < seqLen; t++) {
+  for (let t = 0; t < seqLen; t++) {
     let maxProb = -Infinity;
     let maxIdx = -1;
 
@@ -76,11 +88,11 @@ export function decodeCTC(logits: Float32Array, shape: number[], vocab: string[]
     // Blank token is usually the last one in doctr
     const blankIdx = numClasses - 1;
 
-    if (maxIdx !== blankIdx && maxIdx !== lastCharIdx) {
+    if (maxIdx !== blankIdx && maxIdx !== lastCharIdx && maxIdx >= 0 && maxIdx < vocab.length) {
       decoded += vocab[maxIdx];
     }
     lastCharIdx = maxIdx;
   }
 
-  return decoded;
+  return decoded.trim();
 }

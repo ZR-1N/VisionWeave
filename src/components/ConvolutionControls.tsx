@@ -7,7 +7,7 @@ interface Props {
 }
 
 export const ConvolutionControls: React.FC<Props> = ({ params, onChange }) => {
-  const handleChange = (field: keyof ConvolutionParams, value: any) => {
+  const handleChange = (field: keyof ConvolutionParams, value: ConvolutionParams[keyof ConvolutionParams]) => {
     onChange({ ...params, [field]: value });
   };
 

@@ -7,10 +7,10 @@ import { ImageTensor } from '../../types/image';
 export function postprocess(tensor: ort.Tensor, width: number, height: number): ImageTensor {
   const size = width * height;
   const float32Data = tensor.data as Float32Array;
-  
+
   // Create RGBA Uint8ClampedArray
   const rgbaData = new Uint8ClampedArray(4 * size);
-  
+
   // NCHW offsets
   const rOffset = 0;
   const gOffset = size;
@@ -18,7 +18,7 @@ export function postprocess(tensor: ort.Tensor, width: number, height: number): 
 
   for (let i = 0; i < size; i++) {
     const rgbaIndex = i * 4;
-    
+
     // Scale back to [0, 255] and clamp
     rgbaData[rgbaIndex] = Math.max(0, Math.min(255, float32Data[rOffset + i] * 255.0));
     rgbaData[rgbaIndex + 1] = Math.max(0, Math.min(255, float32Data[gOffset + i] * 255.0));

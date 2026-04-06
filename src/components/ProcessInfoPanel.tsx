@@ -44,7 +44,7 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
         <div className="text-sm text-gray-600 space-y-2">
           <p><span className="font-medium text-gray-700">模型:</span> DocTR (DBNet + CRNN) 或 Zero-DCE++</p>
           <p><span className="font-medium text-gray-700">任务:</span> 文字识别与分析 / 低光增强</p>
-          
+
           <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-800 text-xs">
             <p className="font-medium mb-1">使用说明 (OCR):</p>
             <ol className="list-decimal ml-4 space-y-1">

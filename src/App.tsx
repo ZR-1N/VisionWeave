@@ -84,16 +84,20 @@ function App() {
       setWebgpuSupported(false);
       console.error(err);
     });
-  }, [filterEngine, nonLinearEngine]);
+  }, [filterEngine, nonLinearEngine, modelEngine, ocrEngine]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {
     try {
       const tensor = imageToTensor(img);
       setOriginalImage(tensor);
       setResultImage(null);
+      setOcrResults([]);
+      setInferenceTime(null);
+      setProcessingProgress(null);
       setError(null);
-    } catch (err: any) {
-      setError('Failed to load image: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError('Failed to load image: ' + message);
     }
   }, []);
 
@@ -108,6 +112,7 @@ function App() {
     setError(null);
     setInferenceTime(null);
     setProcessingProgress(null);
+    setOcrResults([]);
 
     try {
       const start = performance.now();
@@ -128,8 +133,9 @@ function App() {
 
       console.log(`${activeMode} took ${end - start}ms`);
       setResultImage(result);
-    } catch (err: any) {
-      setError('Processing failed: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError('Processing failed: ' + message);
     } finally {
       setIsProcessing(false);
     }
@@ -159,8 +165,9 @@ function App() {
         setResultImage(res.output);
         setInferenceTime(res.inferenceTime);
       }
-    } catch (err: any) {
-      setError('Model inference failed: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError('Model inference failed: ' + message);
     } finally {
       setIsProcessing(false);
     }
@@ -207,8 +214,9 @@ function App() {
     try {
       const result = await nonLinearEngine.applyFilter(originalImage, fParams);
       setResultImage(result);
-    } catch (err: any) {
-      setError('Processing failed: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError('Processing failed: ' + message);
     } finally {
       setIsProcessing(false);
     }
