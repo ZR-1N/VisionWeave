@@ -18,6 +18,59 @@ export class OCREngine {
   private recoModelPath = '/models/doctr/crnn_mobilenet_v3_small.onnx';
   private vocabPath = '/models/doctr/vocab.json';
 
+  private async createSessionWithProviderTimeout(
+    model: string | Uint8Array,
+    provider: 'webgpu' | 'wasm',
+    timeoutMs: number,
+    externalData?: Array<{ path: string; data: Uint8Array }>
+  ): Promise<ort.InferenceSession> {
+    const options = {
+      executionProviders: [provider],
+      ...(externalData ? { externalData } : {}),
+    } as ort.InferenceSession.SessionOptions;
+
+    const sessionPromise = typeof model === 'string'
+      ? ort.InferenceSession.create(model, options)
+      : ort.InferenceSession.create(model, options);
+
+    return new Promise<ort.InferenceSession>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        reject(new Error(`${provider} session creation timed out after ${Math.round(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      sessionPromise
+        .then((session) => {
+          window.clearTimeout(timer);
+          resolve(session);
+        })
+        .catch((err) => {
+          window.clearTimeout(timer);
+          reject(err);
+        });
+    });
+  }
+
+  private async loadModelWithExternalData(modelPath: string): Promise<{ modelBytes: Uint8Array; externalData?: Array<{ path: string; data: Uint8Array }> }> {
+    const modelResp = await fetch(modelPath);
+    if (!modelResp.ok) {
+      throw new Error(`Failed to fetch model: ${modelPath} (${modelResp.status})`);
+    }
+    const modelBytes = new Uint8Array(await modelResp.arrayBuffer());
+
+    const externalPath = `${modelPath}.data`;
+    const extResp = await fetch(externalPath);
+    if (extResp.ok) {
+      const extBytes = new Uint8Array(await extResp.arrayBuffer());
+      const extFileName = externalPath.split('/').pop() ?? 'model.data';
+      return {
+        modelBytes,
+        externalData: [{ path: extFileName, data: extBytes }],
+      };
+    }
+
+    return { modelBytes };
+  }
+
   private getInputName(session: ort.InferenceSession): string {
     return session.inputNames[0] ?? 'input';
   }
@@ -54,46 +107,72 @@ export class OCREngine {
   }
 
   private async createSessionWithFallback(modelPath: string): Promise<ort.InferenceSession> {
+    const errors: string[] = [];
+
+    const tryUrlSource = async () => {
+      try {
+        return await this.createSessionWithProviderTimeout(modelPath, 'webgpu', 20000);
+      } catch (err) {
+        errors.push(`webgpu(url): ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      try {
+        return await this.createSessionWithProviderTimeout(modelPath, 'wasm', 30000);
+      } catch (err) {
+        errors.push(`wasm(url): ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      return null;
+    };
+
+    const fromUrl = await tryUrlSource();
+    if (fromUrl) return fromUrl;
+
+    // Fallback: explicit bytes + external data for environments where URL loading
+    // of ONNX external data is unreliable.
     try {
-      return await ort.InferenceSession.create(modelPath, {
-        executionProviders: ['webgpu'],
-      });
-    } catch (webgpuErr) {
-      console.warn(`WebGPU init failed for ${modelPath}, falling back to WASM`, webgpuErr);
-      return await ort.InferenceSession.create(modelPath, {
-        executionProviders: ['wasm'],
-      });
+      const { modelBytes, externalData } = await this.loadModelWithExternalData(modelPath);
+      try {
+        return await this.createSessionWithProviderTimeout(modelBytes, 'webgpu', 20000, externalData);
+      } catch (err) {
+        errors.push(`webgpu(buffer): ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      try {
+        return await this.createSessionWithProviderTimeout(modelBytes, 'wasm', 30000, externalData);
+      } catch (err) {
+        errors.push(`wasm(buffer): ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } catch (err) {
+      errors.push(`buffer-load: ${err instanceof Error ? err.message : String(err)}`);
     }
+
+    throw new Error(`Failed to create ONNX session for ${modelPath}. Attempts: ${errors.join(' | ')}`);
   }
 
   async init(): Promise<boolean> {
-    try {
-      // 1. Load Vocabulary
-      const response = await fetch(this.vocabPath);
-      if (!response.ok) {
-        throw new Error(`Failed to load OCR vocab: ${response.status}`);
-      }
-
-      const vocab = await response.json();
-      if (!Array.isArray(vocab) || vocab.length === 0) {
-        throw new Error('OCR vocab is invalid or empty');
-      }
-      this.vocab = vocab as string[];
-
-      // 2. Initialize Sessions
-      const [detSession, recoSession] = await Promise.all([
-        this.createSessionWithFallback(this.detModelPath),
-        this.createSessionWithFallback(this.recoModelPath),
-      ]);
-      this.detSession = detSession;
-      this.recoSession = recoSession;
-
-      console.log('OCR Engine (Detection + Recognition) initialized');
-      return true;
-    } catch (e) {
-      console.error('Failed to initialize OCR Engine:', e);
-      return false;
+    // 1. Load Vocabulary
+    const response = await fetch(this.vocabPath);
+    if (!response.ok) {
+      throw new Error(`Failed to load OCR vocab: ${response.status}`);
     }
+
+    const vocab = await response.json();
+    if (!Array.isArray(vocab) || vocab.length === 0) {
+      throw new Error('OCR vocab is invalid or empty');
+    }
+    this.vocab = vocab as string[];
+
+    // 2. Initialize Sessions
+    const [detSession, recoSession] = await Promise.all([
+      this.createSessionWithFallback(this.detModelPath),
+      this.createSessionWithFallback(this.recoModelPath),
+    ]);
+    this.detSession = detSession;
+    this.recoSession = recoSession;
+
+    console.log('OCR Engine (Detection + Recognition) initialized');
+    return true;
   }
 
   async runOCR(input: ImageTensor, onProgress?: (progress: number) => void): Promise<OCRResult[]> {
