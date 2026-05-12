@@ -196,26 +196,24 @@ export const KERNEL_PRESETS: PresetKernel[] = [
     category: 'artistic',
     size: 3,
     kernel: [
-      -2, -1, 0,
-      -1, 1, 1,
-      0, 1, 2
+      -1, -1, 0,
+      -1, 0, 1,
+      0, 1, 1
     ],
     normalize: false,
-    bias: 128,
-    description: '模拟右下打光的压花效果，立体感更明显。'
+    description: '模拟右下打光的压花效果，保留压花层次但不过度提亮。'
   },
   {
     name: '压花：左上光源 (Emboss NW)',
     category: 'artistic',
     size: 3,
     kernel: [
-      2, 1, 0,
-      1, 1, -1,
-      0, -1, -2
+      1, 1, 0,
+      1, 0, -1,
+      0, -1, -1
     ],
     normalize: false,
-    bias: 128,
-    description: '改变光源方向，让画面呈现另一种浮雕层次。'
+    description: '模拟左上打光的压花效果，与右下光源形成反向立体感。'
   },
   {
     name: '文档边缘增强 (Sobel X)',
