@@ -6,6 +6,7 @@ export interface ImageTensor {
 }
 
 export type KernelSize = 3 | 5 | 7;
+export type PresetCategory = 'enhance' | 'edge' | 'blur' | 'artistic' | 'document';
 
 export interface ConvolutionParams {
   kernel: number[]; // Flattened kernel matrix
@@ -20,12 +21,23 @@ export interface ConvolutionParams {
 
 export interface PresetKernel {
   name: string;
+  category: PresetCategory;
   kernel: number[];
   size: KernelSize;
   normalize?: boolean;
+  bias?: number;
+  description?: string;
 }
 
-export type NonLinearFilterType = 'median' | 'bilateral' | 'dilation' | 'erosion' | 'adaptive_threshold' | 'detail_enhance';
+export type NonLinearFilterType =
+  | 'median'
+  | 'bilateral'
+  | 'dilation'
+  | 'erosion'
+  | 'opening'
+  | 'closing'
+  | 'adaptive_threshold'
+  | 'detail_enhance';
 
 export interface NonLinearFilterParams {
   type: NonLinearFilterType;

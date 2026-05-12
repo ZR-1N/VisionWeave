@@ -49,13 +49,13 @@ export const ModelSelector: React.FC<Props> = ({
     <div className={`bg-white p-4 rounded-lg shadow-sm border mt-4 transition-all ${active ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200'
       }`}>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-gray-800">AI Model Engine</h3>
+        <h3 className="font-semibold text-gray-800">AI Lab / 本地 AI 实验室</h3>
         <span className={`text-xs px-2 py-0.5 rounded font-medium ${statusClass}`}>
           {statusLabel}
         </span>
       </div>
       <p className="text-sm text-gray-500 mb-3">
-        Select a computer vision model to run locally.
+        运行本地图像模型，当前包含低光增强与 OCR 文本识别。
       </p>
 
       <div className="space-y-3">

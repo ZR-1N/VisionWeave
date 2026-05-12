@@ -12,7 +12,9 @@ export class WebGPUNonLinearFilter {
     'dilation': 2,
     'erosion': 3,
     'adaptive_threshold': 4,
-    'detail_enhance': 5
+    'detail_enhance': 5,
+    'opening': 6,
+    'closing': 7,
   };
 
   async init(): Promise<boolean> {
@@ -65,6 +67,23 @@ export class WebGPUNonLinearFilter {
     input: ImageTensor,
     params: NonLinearFilterParams
   ): Promise<ImageTensor> {
+    if (params.type === 'opening') {
+      const eroded = await this.applyPrimitiveFilter(input, { ...params, type: 'erosion' });
+      return this.applyPrimitiveFilter(eroded, { ...params, type: 'dilation' });
+    }
+
+    if (params.type === 'closing') {
+      const dilated = await this.applyPrimitiveFilter(input, { ...params, type: 'dilation' });
+      return this.applyPrimitiveFilter(dilated, { ...params, type: 'erosion' });
+    }
+
+    return this.applyPrimitiveFilter(input, params);
+  }
+
+  private async applyPrimitiveFilter(
+    input: ImageTensor,
+    params: NonLinearFilterParams
+  ): Promise<ImageTensor> {
     const device = GPUManager.getInstance().getDevice();
     if (!this.pipeline || !this.bindGroupLayout) {
       throw new Error('WebGPU Non-Linear Filter not initialized');
@@ -87,7 +106,7 @@ export class WebGPUNonLinearFilter {
     // } -> 12 * 4 = 48 bytes
     const paramsArray = new ArrayBuffer(48);
     const paramsViewF32 = new Float32Array(paramsArray);
-    
+
     paramsViewF32[0] = input.width;
     paramsViewF32[1] = input.height;
     paramsViewF32[2] = input.width;

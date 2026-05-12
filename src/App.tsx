@@ -341,6 +341,8 @@ function App() {
                 ...p,
                 kernel: preset.kernel,
                 kernelSize: preset.size,
+                padding: Math.floor(preset.size / 2),
+                bias: preset.bias ?? 0,
                 normalize: preset.normalize ?? p.normalize
               }));
             }}
@@ -422,20 +424,20 @@ function App() {
                 ? !webgpuSupported
                 : !selectedReady;
               return (
-            <button
-              onClick={handleApply}
-              disabled={!originalImage || isProcessing || disabledByMode}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 px-6 rounded-lg shadow-md transition-all font-semibold text-lg"
-            >
-              {isProcessing ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Play className="w-6 h-6" />
-              )}
-              {activeMode === 'convolution' ? 'Apply Convolution' :
-                activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' :
-                  selectedModel === 'ocr' ? 'Run DocTR OCR' : 'Run Zero-DCE++'}
-            </button>
+                <button
+                  onClick={handleApply}
+                  disabled={!originalImage || isProcessing || disabledByMode}
+                  className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 px-6 rounded-lg shadow-md transition-all font-semibold text-lg"
+                >
+                  {isProcessing ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Play className="w-6 h-6" />
+                  )}
+                  {activeMode === 'convolution' ? 'Apply Convolution' :
+                    activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' :
+                      selectedModel === 'ocr' ? 'Run DocTR OCR' : 'Run Zero-DCE++'}
+                </button>
               );
             })()}
             <button
