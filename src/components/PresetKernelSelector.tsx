@@ -9,7 +9,8 @@ interface Props {
 export const PresetKernelSelector: React.FC<Props> = ({ onSelect }) => {
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-4">
-      <h3 className="font-semibold text-gray-800 mb-3">Presets</h3>
+      <h3 className="font-semibold text-gray-800 mb-1">场景预设</h3>
+      <p className="text-xs text-gray-500 mb-3">Scene Presets for visible visual effects</p>
       <div className="flex flex-wrap gap-2">
         {KERNEL_PRESETS.map((preset) => (
           <button
