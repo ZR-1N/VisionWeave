@@ -15,7 +15,7 @@ import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
 import { AIModelType, ModelEngine } from './core/models/modelEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
-import { Play, Download, AlertTriangle, Columns, LayoutGrid } from 'lucide-react';
+import { Play, Download, AlertTriangle, Info, Columns, LayoutGrid } from 'lucide-react';
 import { KERNEL_PRESETS } from './core/filters/presets';
 
 const defaultParams: ConvolutionParams = {
@@ -56,6 +56,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [inferenceTime, setInferenceTime] = useState<number | null>(null);
 
   const [filterEngine] = useState(() => new WebGPUConvolution());
@@ -133,14 +134,20 @@ function App() {
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {
     try {
-      const tensor = imageToTensor(img);
+      const { tensor, resized, originalWidth, originalHeight } = imageToTensor(img);
       setOriginalImage(tensor);
       setResultImage(null);
       setInferenceTime(null);
       setProcessingProgress(null);
       setError(null);
+      setNotice(
+        resized
+          ? `检测到超大图像，已自动从 ${originalWidth} x ${originalHeight} 缩放到 ${tensor.width} x ${tensor.height}，以避免上传和处理时卡住。`
+          : null
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      setNotice(null);
       setError('Failed to load image: ' + message);
     }
   }, []);
@@ -408,12 +415,18 @@ function App() {
           </div>
 
           {/* Status and Messages */}
-          {(error || inferenceTime || processingProgress) && (
+          {(error || notice || inferenceTime || processingProgress) && (
             <div className="flex flex-col gap-2">
               {error && (
                 <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm flex items-center gap-2">
                   <AlertTriangle size={18} />
                   {error}
+                </div>
+              )}
+              {notice && (
+                <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-sm flex items-center gap-2">
+                  <Info size={18} />
+                  {notice}
                 </div>
               )}
               {processingProgress !== null && processingProgress < 1 && (

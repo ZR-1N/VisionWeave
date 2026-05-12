@@ -10,6 +10,7 @@ interface ModelConfig {
   label: string;
   tileMultiple?: number;
   minTileSize?: number;
+  maxLongEdge?: number;
   maxTileSize: number;
   overlap: number;
   preprocess: (input: ImageTensor) => ort.Tensor;
@@ -33,7 +34,8 @@ export class ModelEngine {
       label: 'AnimeGANv2',
       tileMultiple: 32,
       minTileSize: 256,
-      maxTileSize: 1024,
+      maxLongEdge: 1920,
+      maxTileSize: 512,
       overlap: 32,
       preprocess: preprocessAnimeGAN,
       postprocess: postprocessAnimeGAN,
@@ -74,20 +76,23 @@ export class ModelEngine {
     const outputName = this.session.outputNames[0] ?? 'output';
 
     const startTime = performance.now();
-    const { width, height } = input;
+    const originalWidth = input.width;
+    const originalHeight = input.height;
+    const workingInput = limitInputForModel(input, config.maxLongEdge);
+    const { width, height } = workingInput;
 
     const TILE_SIZE = config.maxTileSize;
     const OVERLAP = config.overlap;
 
     // If image is small enough, run directly
     if (width <= TILE_SIZE && height <= TILE_SIZE) {
-      const prepared = prepareModelInput(input, config.tileMultiple, config.minTileSize);
+      const prepared = prepareModelInput(workingInput, config.tileMultiple, config.minTileSize);
       const tensor = config.preprocess(prepared.image);
       const results = await this.session.run({ [inputName]: tensor });
       const outputTensor = results[outputName] ?? Object.values(results)[0];
       if (!outputTensor) throw new Error('Model returned no output tensor');
       const output = config.postprocess(outputTensor as ort.Tensor, prepared.image.width, prepared.image.height);
-      const restored = restoreToOriginalSize(output, width, height);
+      const restored = restoreToOriginalSize(output, originalWidth, originalHeight);
       return { output: restored, inferenceTime: performance.now() - startTime };
     }
 
@@ -111,7 +116,7 @@ export class ModelEngine {
         const h = Math.min(TILE_SIZE, height - y);
 
         // Extract and process tile
-        const tileInput = extractTile(input, x, y, w, h);
+        const tileInput = extractTile(workingInput, x, y, w, h);
         const preparedTile = prepareModelInput(tileInput, config.tileMultiple, config.minTileSize);
         const tileTensor = config.preprocess(preparedTile.image);
         const tileResults = await this.session.run({ [inputName]: tileTensor });
@@ -136,12 +141,13 @@ export class ModelEngine {
 
         processedTiles++;
         if (onProgress) onProgress(processedTiles / totalTiles);
+        await yieldToBrowser();
       }
     }
 
     const endTime = performance.now();
     return {
-      output: { width, height, channels: 4, data: resultRGBA },
+      output: restoreToOriginalSize({ width, height, channels: 4, data: resultRGBA }, originalWidth, originalHeight),
       inferenceTime: endTime - startTime,
     };
   }
@@ -213,6 +219,28 @@ function restoreToOriginalSize(input: ImageTensor, width: number, height: number
     return input;
   }
   return resizeImageTensor(input, width, height);
+}
+
+function limitInputForModel(input: ImageTensor, maxLongEdge?: number): ImageTensor {
+  if (!maxLongEdge) {
+    return input;
+  }
+
+  const longEdge = Math.max(input.width, input.height);
+  if (longEdge <= maxLongEdge) {
+    return input;
+  }
+
+  const scale = maxLongEdge / longEdge;
+  const targetWidth = Math.max(1, Math.round(input.width * scale));
+  const targetHeight = Math.max(1, Math.round(input.height * scale));
+  return resizeImageTensor(input, targetWidth, targetHeight);
+}
+
+async function yieldToBrowser(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(() => resolve(), 0);
+  });
 }
 
 function resizeImageTensor(input: ImageTensor, width: number, height: number): ImageTensor {

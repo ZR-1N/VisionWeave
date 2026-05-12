@@ -10,13 +10,17 @@ export const ImageUploader: React.FC<Props> = ({ onImageLoad }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => onImageLoad(img);
-      img.src = event.target?.result as string;
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      onImageLoad(img);
+      URL.revokeObjectURL(objectUrl);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
+    e.target.value = '';
   };
 
   return (

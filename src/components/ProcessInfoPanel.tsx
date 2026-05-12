@@ -57,7 +57,7 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
                 <li>在 AI Lab 中选择 <strong>AnimeGANv2</strong>。</li>
                 <li>点击 <strong>运行动漫风格化</strong> 开始本地推理。</li>
                 <li>处理完成后，可使用<strong>分屏对比</strong>观察照片与动漫化结果。</li>
-                <li>当前接入的是 <strong>Shinkai</strong> 风格模型，后续可继续扩展更多风格。</li>
+                <li>当前接入的是 <strong>Shinkai</strong> 风格模型，超大图上传时会先自动缩放，推理阶段也会继续限长边并分块处理。</li>
               </ol>
             ) : (
               <ol className="list-decimal ml-4 space-y-1">
