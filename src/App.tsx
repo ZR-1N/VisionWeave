@@ -12,7 +12,7 @@ import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/i
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
 import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
-import { ModelEngine } from './core/models/modelEngine';
+import { AIModelType, ModelEngine } from './core/models/modelEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle, Columns, LayoutGrid } from 'lucide-react';
@@ -43,13 +43,14 @@ function App() {
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
   const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear' | 'model'>('convolution');
-  const [selectedModel, setSelectedModel] = useState<'zero-dce++'>('zero-dce++');
+  const [selectedModel, setSelectedModel] = useState<AIModelType>('zero-dce++');
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
-  const [modelReady, setModelReady] = useState({ zeroDce: false });
-  const [modelLoading, setModelLoading] = useState({ zeroDce: true });
-  const [modelInitError, setModelInitError] = useState<{ zeroDce: string | null }>({
+  const [modelReady, setModelReady] = useState({ zeroDce: false, animeGan: false });
+  const [modelLoading, setModelLoading] = useState({ zeroDce: true, animeGan: true });
+  const [modelInitError, setModelInitError] = useState<{ zeroDce: string | null; animeGan: string | null }>({
     zeroDce: null,
+    animeGan: null,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
@@ -59,7 +60,8 @@ function App() {
 
   const [filterEngine] = useState(() => new WebGPUConvolution());
   const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
-  const [modelEngine] = useState(() => new ModelEngine());
+  const [zeroDceEngine] = useState(() => new ModelEngine());
+  const [animeGanEngine] = useState(() => new ModelEngine());
 
   useEffect(() => {
     const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -81,8 +83,8 @@ function App() {
     };
 
     const initModel = async (
-      key: 'zeroDce',
-      label: 'Zero-DCE++',
+      key: 'zeroDce' | 'animeGan',
+      label: 'Zero-DCE++' | 'AnimeGANv2',
       initFn: () => Promise<boolean>
     ) => {
       setModelLoading((prev) => ({ ...prev, [key]: true }));
@@ -117,14 +119,17 @@ function App() {
         setWebgpuSupported(false);
       }
 
-      await initModel('zeroDce', 'Zero-DCE++', () => modelEngine.init());
+      await Promise.all([
+        initModel('zeroDce', 'Zero-DCE++', () => zeroDceEngine.init('zero-dce++')),
+        initModel('animeGan', 'AnimeGANv2', () => animeGanEngine.init('animeganv2')),
+      ]);
     };
 
     initGPU().catch(err => {
       setWebgpuSupported(false);
       console.error(err);
     });
-  }, [filterEngine, nonLinearEngine, modelEngine]);
+  }, [filterEngine, nonLinearEngine, zeroDceEngine, animeGanEngine]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {
     try {
@@ -149,16 +154,17 @@ function App() {
         return;
       }
     } else {
-      const ready = modelReady.zeroDce;
-      const loading = modelLoading.zeroDce;
-      const initError = modelInitError.zeroDce;
+      const ready = selectedModel === 'animeganv2' ? modelReady.animeGan : modelReady.zeroDce;
+      const loading = selectedModel === 'animeganv2' ? modelLoading.animeGan : modelLoading.zeroDce;
+      const initError = selectedModel === 'animeganv2' ? modelInitError.animeGan : modelInitError.zeroDce;
+      const modelLabel = selectedModel === 'animeganv2' ? 'AnimeGANv2' : 'Zero-DCE++';
       if (!ready) {
         if (loading) {
-          setError('Zero-DCE++ model is still loading');
+          setError(`${modelLabel} model is still loading`);
         } else if (initError) {
           setError(initError);
         } else {
-          setError('Zero-DCE++ model is not ready');
+          setError(`${modelLabel} model is not ready`);
         }
         return;
       }
@@ -178,7 +184,8 @@ function App() {
       } else if (activeMode === 'nonlinear') {
         result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
       } else {
-        const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
+        const activeEngine = selectedModel === 'animeganv2' ? animeGanEngine : zeroDceEngine;
+        const res = await activeEngine.run(originalImage, (p) => setProcessingProgress(p));
         result = res.output;
         setInferenceTime(res.inferenceTime);
       }
@@ -196,21 +203,22 @@ function App() {
     }
   };
 
-  const handleModelApply = async (modelType: 'zero-dce++') => {
+  const handleModelApply = async (modelType: AIModelType) => {
     setSelectedModel(modelType);
     setActiveMode('model');
     if (!originalImage) return;
 
-    const ready = modelReady.zeroDce;
-    const loading = modelLoading.zeroDce;
-    const initError = modelInitError.zeroDce;
+    const ready = modelType === 'animeganv2' ? modelReady.animeGan : modelReady.zeroDce;
+    const loading = modelType === 'animeganv2' ? modelLoading.animeGan : modelLoading.zeroDce;
+    const initError = modelType === 'animeganv2' ? modelInitError.animeGan : modelInitError.zeroDce;
+    const modelLabel = modelType === 'animeganv2' ? 'AnimeGANv2' : 'Zero-DCE++';
     if (!ready) {
       if (loading) {
-        setError('Zero-DCE++ model is still loading');
+        setError(`${modelLabel} model is still loading`);
       } else if (initError) {
         setError(initError);
       } else {
-        setError('Zero-DCE++ model is not ready');
+        setError(`${modelLabel} model is not ready`);
       }
       return;
     }
@@ -220,7 +228,8 @@ function App() {
     setProcessingProgress(null);
 
     try {
-      const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
+      const activeEngine = modelType === 'animeganv2' ? animeGanEngine : zeroDceEngine;
+      const res = await activeEngine.run(originalImage, (p) => setProcessingProgress(p));
       setResultImage(res.output);
       setInferenceTime(res.inferenceTime);
     } catch (err: unknown) {
@@ -366,7 +375,7 @@ function App() {
             </div>
 
             {(() => {
-              const selectedReady = modelReady.zeroDce;
+              const selectedReady = selectedModel === 'animeganv2' ? modelReady.animeGan : modelReady.zeroDce;
               const disabledByMode = activeMode === 'convolution' || activeMode === 'nonlinear'
                 ? !webgpuSupported
                 : !selectedReady;
@@ -383,7 +392,7 @@ function App() {
                   )}
                   {activeMode === 'convolution' ? 'Apply Convolution' :
                     activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' :
-                      'Run Zero-DCE++'}
+                      selectedModel === 'animeganv2' ? 'Run AnimeGANv2' : 'Run Zero-DCE++'}
                 </button>
               );
             })()}
@@ -457,6 +466,7 @@ function App() {
                       params={params}
                       nonLinearParams={nonLinearParams}
                       mode={activeMode}
+                      selectedModel={selectedModel}
                     />
                   </div>
                 </div>
@@ -485,6 +495,7 @@ function App() {
                     params={params}
                     nonLinearParams={nonLinearParams}
                     mode={activeMode}
+                    selectedModel={selectedModel}
                   />
                 </div>
               </div>

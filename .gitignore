@@ -24,4 +24,5 @@ dist-ssr
 *.sw?
 doctr/
 Zero-DCE_extension/
+AnimeGANv2/
 public/ort/

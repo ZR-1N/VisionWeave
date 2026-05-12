@@ -1,17 +1,21 @@
 import React from 'react';
+import { AIModelType } from '../core/models/modelEngine';
 
 interface Props {
-  onApply: (modelType: 'zero-dce++') => void;
-  selectedModel: 'zero-dce++';
-  onModelChange: (modelType: 'zero-dce++') => void;
+  onApply: (modelType: AIModelType) => void;
+  selectedModel: AIModelType;
+  onModelChange: (modelType: AIModelType) => void;
   modelReady: {
     zeroDce: boolean;
+    animeGan: boolean;
   };
   modelLoading: {
     zeroDce: boolean;
+    animeGan: boolean;
   };
   modelInitError: {
     zeroDce: string | null;
+    animeGan: string | null;
   };
   isProcessing: boolean;
   active: boolean;
@@ -27,9 +31,9 @@ export const ModelSelector: React.FC<Props> = ({
   isProcessing,
   active,
 }) => {
-  const selectedReady = modelReady.zeroDce;
-  const selectedLoading = modelLoading.zeroDce;
-  const selectedError = modelInitError.zeroDce;
+  const selectedReady = selectedModel === 'animeganv2' ? modelReady.animeGan : modelReady.zeroDce;
+  const selectedLoading = selectedModel === 'animeganv2' ? modelLoading.animeGan : modelLoading.zeroDce;
+  const selectedError = selectedModel === 'animeganv2' ? modelInitError.animeGan : modelInitError.zeroDce;
 
   const statusClass = selectedReady
     ? 'bg-green-100 text-green-800'
@@ -52,16 +56,17 @@ export const ModelSelector: React.FC<Props> = ({
         </span>
       </div>
       <p className="text-sm text-gray-500 mb-3">
-        运行本地图像模型。当前保留 Zero-DCE++ 低光增强，OCR 已临时下线。
+        运行本地图像模型。当前支持低光增强与本地动漫风格化，OCR 已临时下线。
       </p>
 
       <div className="space-y-3">
         <select
           value={selectedModel}
-          onChange={(e) => onModelChange(e.target.value as 'zero-dce++')}
+          onChange={(e) => onModelChange(e.target.value as AIModelType)}
           className="w-full border border-gray-300 rounded p-2 text-sm bg-gray-50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           <option value="zero-dce++">Zero-DCE++ (低光增强)</option>
+          <option value="animeganv2">AnimeGANv2 (本地动漫风格化)</option>
           <option disabled>DocTR OCR (临时下线)</option>
           <option disabled>超分辨率 (开发中)</option>
           <option disabled>图像降噪 (开发中)</option>
@@ -72,7 +77,7 @@ export const ModelSelector: React.FC<Props> = ({
           disabled={isProcessing || !selectedReady}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm py-2 rounded font-medium transition-colors"
         >
-          {isProcessing ? '正在处理...' : '运行增强模型'}
+          {isProcessing ? '正在处理...' : selectedModel === 'animeganv2' ? '运行动漫风格化' : '运行增强模型'}
         </button>
 
         {!selectedReady && !selectedLoading && selectedError && (

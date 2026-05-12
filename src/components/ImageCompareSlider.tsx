@@ -42,7 +42,7 @@ export const ImageCompareSlider: React.FC<Props> = ({ original, processed }) => 
         <span className="font-semibold text-gray-700">Split-View Comparison</span>
         <div className="flex items-center gap-4 text-xs font-medium">
           <span className="text-blue-600">Left: Original</span>
-          <span className="text-indigo-600">Right: Enhanced</span>
+          <span className="text-indigo-600">Right: Processed</span>
         </div>
       </div>
 
