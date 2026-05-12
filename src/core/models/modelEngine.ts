@@ -99,7 +99,8 @@ export class ModelEngine {
     // Tiling & Stitching Logic for Large Images
     console.log(`Large image detected (${width}x${height}). Using tiled processing for ${config.label}...`);
 
-    const resultRGBA = new Uint8ClampedArray(width * height * 4);
+    const blendedRGBA = new Float32Array(width * height * 4);
+    const blendedWeight = new Float32Array(width * height);
     const stride = TILE_SIZE - OVERLAP;
 
     const tilesX = Math.ceil((width - OVERLAP) / stride);
@@ -129,15 +130,16 @@ export class ModelEngine {
         );
         const tileOutput = restoreToOriginalSize(rawTileOutput, w, h);
 
-        // Stitch back to final buffer
-        // Simple copy for now, but we only copy the non-overlapping part if not last tile
-        // to avoid visible seams, or we can just overwrite. 
-        // Zero-DCE++ is stable enough that simple overwrite often works.
-        for (let row = 0; row < h; row++) {
-          const srcOffset = row * w * 4;
-          const destOffset = ((y + row) * width + x) * 4;
-          resultRGBA.set(tileOutput.data.subarray(srcOffset, srcOffset + w * 4), destOffset);
-        }
+        blendTileIntoResult(
+          tileOutput,
+          blendedRGBA,
+          blendedWeight,
+          x,
+          y,
+          width,
+          height,
+          OVERLAP
+        );
 
         processedTiles++;
         if (onProgress) onProgress(processedTiles / totalTiles);
@@ -146,6 +148,7 @@ export class ModelEngine {
     }
 
     const endTime = performance.now();
+    const resultRGBA = finalizeBlendedResult(blendedRGBA, blendedWeight);
     return {
       output: restoreToOriginalSize({ width, height, channels: 4, data: resultRGBA }, originalWidth, originalHeight),
       inferenceTime: endTime - startTime,
@@ -241,6 +244,96 @@ async function yieldToBrowser(): Promise<void> {
   await new Promise<void>((resolve) => {
     window.setTimeout(() => resolve(), 0);
   });
+}
+
+function blendTileIntoResult(
+  tile: ImageTensor,
+  blendedRGBA: Float32Array,
+  blendedWeight: Float32Array,
+  x: number,
+  y: number,
+  fullWidth: number,
+  fullHeight: number,
+  overlap: number
+): void {
+  const touchesLeft = x === 0;
+  const touchesTop = y === 0;
+  const touchesRight = x + tile.width >= fullWidth;
+  const touchesBottom = y + tile.height >= fullHeight;
+  const blendX = Math.min(overlap, Math.floor(tile.width / 2));
+  const blendY = Math.min(overlap, Math.floor(tile.height / 2));
+
+  for (let row = 0; row < tile.height; row++) {
+    for (let col = 0; col < tile.width; col++) {
+      const weight = computeBlendWeight(
+        col,
+        row,
+        tile.width,
+        tile.height,
+        blendX,
+        blendY,
+        touchesLeft,
+        touchesTop,
+        touchesRight,
+        touchesBottom
+      );
+      const pixelIndex = row * tile.width + col;
+      const tileOffset = pixelIndex * 4;
+      const outputIndex = (y + row) * fullWidth + (x + col);
+      const outputOffset = outputIndex * 4;
+
+      blendedRGBA[outputOffset] += tile.data[tileOffset] * weight;
+      blendedRGBA[outputOffset + 1] += tile.data[tileOffset + 1] * weight;
+      blendedRGBA[outputOffset + 2] += tile.data[tileOffset + 2] * weight;
+      blendedRGBA[outputOffset + 3] += tile.data[tileOffset + 3] * weight;
+      blendedWeight[outputIndex] += weight;
+    }
+  }
+}
+
+function computeBlendWeight(
+  col: number,
+  row: number,
+  width: number,
+  height: number,
+  blendX: number,
+  blendY: number,
+  touchesLeft: boolean,
+  touchesTop: boolean,
+  touchesRight: boolean,
+  touchesBottom: boolean
+): number {
+  let weightX = 1;
+  let weightY = 1;
+
+  if (!touchesLeft && blendX > 0 && col < blendX) {
+    weightX = (col + 1) / (blendX + 1);
+  } else if (!touchesRight && blendX > 0 && col >= width - blendX) {
+    weightX = (width - col) / (blendX + 1);
+  }
+
+  if (!touchesTop && blendY > 0 && row < blendY) {
+    weightY = (row + 1) / (blendY + 1);
+  } else if (!touchesBottom && blendY > 0 && row >= height - blendY) {
+    weightY = (height - row) / (blendY + 1);
+  }
+
+  return Math.max(1e-6, weightX * weightY);
+}
+
+function finalizeBlendedResult(blendedRGBA: Float32Array, blendedWeight: Float32Array): Uint8ClampedArray {
+  const resultRGBA = new Uint8ClampedArray(blendedRGBA.length);
+
+  for (let i = 0; i < blendedWeight.length; i++) {
+    const weight = blendedWeight[i] || 1;
+    const offset = i * 4;
+    resultRGBA[offset] = Math.round(blendedRGBA[offset] / weight);
+    resultRGBA[offset + 1] = Math.round(blendedRGBA[offset + 1] / weight);
+    resultRGBA[offset + 2] = Math.round(blendedRGBA[offset + 2] / weight);
+    resultRGBA[offset + 3] = Math.round(blendedRGBA[offset + 3] / weight);
+  }
+
+  return resultRGBA;
 }
 
 function resizeImageTensor(input: ImageTensor, width: number, height: number): ImageTensor {
