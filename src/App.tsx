@@ -8,13 +8,11 @@ import { ImagePreview } from './components/ImagePreview';
 import { ImageCompareSlider } from './components/ImageCompareSlider';
 import { ProcessInfoPanel } from './components/ProcessInfoPanel';
 import { ModelSelector } from './components/ModelSelector';
-import { OCRResultOverlay } from './components/OCRResultOverlay';
-import { ImageTensor, ConvolutionParams, NonLinearFilterParams, OCRResult } from './types/image';
+import { ImageTensor, ConvolutionParams, NonLinearFilterParams } from './types/image';
 import { imageToTensor } from './core/image/imageConvert';
 import { WebGPUConvolution } from './core/filters/webgpuConvolution';
 import { WebGPUNonLinearFilter } from './core/filters/webgpuNonLinear';
 import { ModelEngine } from './core/models/modelEngine';
-import { OCREngine } from './core/models/ocrEngine';
 import { GPUManager } from './core/runtime/gpuSupport';
 import { downloadImageTensor } from './core/image/downloadHelper';
 import { Play, Download, AlertTriangle, Columns, LayoutGrid } from 'lucide-react';
@@ -42,18 +40,16 @@ const defaultNonLinearParams: NonLinearFilterParams = {
 function App() {
   const [originalImage, setOriginalImage] = useState<ImageTensor | null>(null);
   const [resultImage, setResultImage] = useState<ImageTensor | null>(null);
-  const [ocrResults, setOcrResults] = useState<OCRResult[]>([]);
   const [params, setParams] = useState<ConvolutionParams>(defaultParams);
   const [nonLinearParams, setNonLinearParams] = useState<NonLinearFilterParams>(defaultNonLinearParams);
   const [activeMode, setActiveMode] = useState<'convolution' | 'nonlinear' | 'model'>('convolution');
-  const [selectedModel, setSelectedModel] = useState<'zero-dce++' | 'ocr'>('zero-dce++');
+  const [selectedModel, setSelectedModel] = useState<'zero-dce++'>('zero-dce++');
 
   const [webgpuSupported, setWebgpuSupported] = useState<boolean | null>(null);
-  const [modelReady, setModelReady] = useState({ zeroDce: false, ocr: false });
-  const [modelLoading, setModelLoading] = useState({ zeroDce: true, ocr: true });
-  const [modelInitError, setModelInitError] = useState<{ zeroDce: string | null; ocr: string | null }>({
+  const [modelReady, setModelReady] = useState({ zeroDce: false });
+  const [modelLoading, setModelLoading] = useState({ zeroDce: true });
+  const [modelInitError, setModelInitError] = useState<{ zeroDce: string | null }>({
     zeroDce: null,
-    ocr: null,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
@@ -64,7 +60,6 @@ function App() {
   const [filterEngine] = useState(() => new WebGPUConvolution());
   const [nonLinearEngine] = useState(() => new WebGPUNonLinearFilter());
   const [modelEngine] = useState(() => new ModelEngine());
-  const [ocrEngine] = useState(() => new OCREngine());
 
   useEffect(() => {
     const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -86,15 +81,15 @@ function App() {
     };
 
     const initModel = async (
-      key: 'zeroDce' | 'ocr',
-      label: 'Zero-DCE++' | 'DocTR',
+      key: 'zeroDce',
+      label: 'Zero-DCE++',
       initFn: () => Promise<boolean>
     ) => {
       setModelLoading((prev) => ({ ...prev, [key]: true }));
       setModelInitError((prev) => ({ ...prev, [key]: null }));
 
       try {
-        const ok = await withTimeout(initFn(), key === 'ocr' ? 90000 : 30000, label);
+        const ok = await withTimeout(initFn(), 30000, label);
         setModelReady((prev) => ({ ...prev, [key]: ok }));
         if (!ok) {
           setModelInitError((prev) => ({
@@ -122,24 +117,20 @@ function App() {
         setWebgpuSupported(false);
       }
 
-      await Promise.all([
-        initModel('zeroDce', 'Zero-DCE++', () => modelEngine.init()),
-        initModel('ocr', 'DocTR', () => ocrEngine.init()),
-      ]);
+      await initModel('zeroDce', 'Zero-DCE++', () => modelEngine.init());
     };
 
     initGPU().catch(err => {
       setWebgpuSupported(false);
       console.error(err);
     });
-  }, [filterEngine, nonLinearEngine, modelEngine, ocrEngine]);
+  }, [filterEngine, nonLinearEngine, modelEngine]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement) => {
     try {
       const tensor = imageToTensor(img);
       setOriginalImage(tensor);
       setResultImage(null);
-      setOcrResults([]);
       setInferenceTime(null);
       setProcessingProgress(null);
       setError(null);
@@ -158,16 +149,16 @@ function App() {
         return;
       }
     } else {
-      const ready = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
-      const loading = selectedModel === 'ocr' ? modelLoading.ocr : modelLoading.zeroDce;
-      const initError = selectedModel === 'ocr' ? modelInitError.ocr : modelInitError.zeroDce;
+      const ready = modelReady.zeroDce;
+      const loading = modelLoading.zeroDce;
+      const initError = modelInitError.zeroDce;
       if (!ready) {
         if (loading) {
-          setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is still loading`);
+          setError('Zero-DCE++ model is still loading');
         } else if (initError) {
           setError(initError);
         } else {
-          setError(`${selectedModel === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+          setError('Zero-DCE++ model is not ready');
         }
         return;
       }
@@ -177,7 +168,6 @@ function App() {
     setError(null);
     setInferenceTime(null);
     setProcessingProgress(null);
-    setOcrResults([]);
 
     try {
       const start = performance.now();
@@ -187,11 +177,6 @@ function App() {
         result = await filterEngine.applyConvolution(originalImage, params);
       } else if (activeMode === 'nonlinear') {
         result = await nonLinearEngine.applyFilter(originalImage, nonLinearParams);
-      } else if (selectedModel === 'ocr') {
-        const results = await ocrEngine.runOCR(originalImage, (p) => setProcessingProgress(p));
-        setOcrResults(results);
-        result = originalImage;
-        setInferenceTime(performance.now() - start);
       } else {
         const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
         result = res.output;
@@ -211,21 +196,21 @@ function App() {
     }
   };
 
-  const handleModelApply = async (modelType: 'zero-dce++' | 'ocr') => {
+  const handleModelApply = async (modelType: 'zero-dce++') => {
     setSelectedModel(modelType);
     setActiveMode('model');
     if (!originalImage) return;
 
-    const ready = modelType === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
-    const loading = modelType === 'ocr' ? modelLoading.ocr : modelLoading.zeroDce;
-    const initError = modelType === 'ocr' ? modelInitError.ocr : modelInitError.zeroDce;
+    const ready = modelReady.zeroDce;
+    const loading = modelLoading.zeroDce;
+    const initError = modelInitError.zeroDce;
     if (!ready) {
       if (loading) {
-        setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is still loading`);
+        setError('Zero-DCE++ model is still loading');
       } else if (initError) {
         setError(initError);
       } else {
-        setError(`${modelType === 'ocr' ? 'DocTR' : 'Zero-DCE++'} model is not ready`);
+        setError('Zero-DCE++ model is not ready');
       }
       return;
     }
@@ -233,55 +218,17 @@ function App() {
     setIsProcessing(true);
     setError(null);
     setProcessingProgress(null);
-    setOcrResults([]);
 
     try {
-      const startTime = performance.now();
-      if (modelType === 'ocr') {
-        const results = await ocrEngine.runOCR(originalImage, (p) => setProcessingProgress(p));
-        setOcrResults(results);
-        setInferenceTime(performance.now() - startTime);
-      } else {
-        const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
-        setResultImage(res.output);
-        setInferenceTime(res.inferenceTime);
-      }
+      const res = await modelEngine.run(originalImage, (p) => setProcessingProgress(p));
+      setResultImage(res.output);
+      setInferenceTime(res.inferenceTime);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setError('Model inference failed: ' + message);
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleRedact = (box: [number, number, number, number]) => {
-    if (!originalImage) return;
-
-    // Perform redaction on the current active image (resultImage or originalImage)
-    const targetImage = resultImage || originalImage;
-    const newData = new Uint8ClampedArray(targetImage.data);
-    const [x1, y1, x2, y2] = box;
-
-    for (let y = y1; y < y2; y++) {
-      for (let x = x1; x < x2; x++) {
-        const idx = (y * targetImage.width + x) * 4;
-        // Fill with black or white (simple privacy erase)
-        newData[idx] = 0;
-        newData[idx + 1] = 0;
-        newData[idx + 2] = 0;
-        newData[idx + 3] = 255;
-      }
-    }
-
-    setResultImage({ ...targetImage, data: newData });
-  };
-
-  const handleUpdateOCRText = (index: number, newText: string) => {
-    setOcrResults(prev => {
-      const next = [...prev];
-      next[index] = { ...next[index], text: newText };
-      return next;
-    });
   };
 
   const handleNonLinearApply = async (fParams: NonLinearFilterParams) => {
@@ -419,7 +366,7 @@ function App() {
             </div>
 
             {(() => {
-              const selectedReady = selectedModel === 'ocr' ? modelReady.ocr : modelReady.zeroDce;
+              const selectedReady = modelReady.zeroDce;
               const disabledByMode = activeMode === 'convolution' || activeMode === 'nonlinear'
                 ? !webgpuSupported
                 : !selectedReady;
@@ -436,7 +383,7 @@ function App() {
                   )}
                   {activeMode === 'convolution' ? 'Apply Convolution' :
                     activeMode === 'nonlinear' ? 'Apply Non-Linear Filter' :
-                      selectedModel === 'ocr' ? 'Run DocTR OCR' : 'Run Zero-DCE++'}
+                      'Run Zero-DCE++'}
                 </button>
               );
             })()}
@@ -503,15 +450,6 @@ function App() {
                     <ImagePreview
                       title="Processed Output"
                       image={resultImage || (activeMode === 'model' ? originalImage : null)}
-                      overlay={ocrResults.length > 0 && originalImage && (
-                        <OCRResultOverlay
-                          results={ocrResults}
-                          imageWidth={originalImage.width}
-                          imageHeight={originalImage.height}
-                          onRedact={handleRedact}
-                          onUpdateText={handleUpdateOCRText}
-                        />
-                      )}
                     />
                   </div>
                   <div className="shrink-0">

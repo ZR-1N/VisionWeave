@@ -45,31 +45,25 @@ export const ProcessInfoPanel: React.FC<Props> = ({ params, nonLinearParams, mod
 
       {mode === 'model' && (
         <div className="text-sm text-gray-600 space-y-2">
-          <p><span className="font-medium text-gray-700">模型:</span> DocTR (DBNet + CRNN) 或 Zero-DCE++</p>
-          <p><span className="font-medium text-gray-700">任务:</span> 文字识别与分析 / 低光增强</p>
+          <p><span className="font-medium text-gray-700">模型:</span> Zero-DCE++</p>
+          <p><span className="font-medium text-gray-700">任务:</span> 低光图像增强</p>
 
           <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-800 text-xs">
-            <p className="font-medium mb-1">使用说明 (OCR):</p>
+            <p className="font-medium mb-1">当前 AI 功能:</p>
             <ol className="list-decimal ml-4 space-y-1">
-              <li>在下拉菜单选择 <strong>DocTR</strong>。</li>
-              <li>点击 <strong>Run DocTR OCR</strong> 开始本地识别。</li>
-              <li>识别完成后，鼠标<strong>悬停</strong>在图片上的蓝色框。</li>
-              <li>在工具条中选择：
-                <ul className="list-disc ml-4 mt-1">
-                  <li><strong>复制</strong>: 将文字存入剪贴板。</li>
-                  <li><strong>修改</strong>: 修正识别错误的文字。</li>
-                  <li><strong>擦除</strong>: 黑色遮盖敏感信息 (隐私脱敏)。</li>
-                </ul>
-              </li>
+              <li>在 AI Lab 中选择 <strong>Zero-DCE++</strong>。</li>
+              <li>点击 <strong>运行增强模型</strong> 开始本地推理。</li>
+              <li>处理完成后，可使用<strong>分屏对比</strong>观察增强前后的差异。</li>
+              <li><strong>OCR</strong> 功能已临时下线，后续会在新模型接入后重新开放。</li>
             </ol>
           </div>
 
           <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded text-gray-600 text-[10px]">
             <p className="font-medium mb-1">深度学习原理:</p>
             <ul className="list-disc ml-4 space-y-1">
-              <li><strong>DBNet</strong>: 像素级预测文本概率图，提取文字区域。</li>
-              <li><strong>CRNN</strong>: 结合 CNN 和 LSTM，对裁剪后的文字行进行序列识别。</li>
-              <li><strong>隐私安全</strong>: 所有的推理过程完全在您的本地显卡上运行，图片不会上传服务器。</li>
+              <li><strong>Zero-DCE++</strong>: 通过轻量神经网络估计像素级增强曲线，提升暗部细节。</li>
+              <li><strong>本地推理</strong>: 所有计算都在浏览器端完成，不依赖远程图像上传。</li>
+              <li><strong>后续扩展</strong>: 这里会继续加入动漫风格化、人像抠图等本地 AI 模型。</li>
             </ul>
           </div>
         </div>
