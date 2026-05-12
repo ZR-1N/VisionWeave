@@ -189,7 +189,6 @@ export const KERNEL_PRESETS: PresetKernel[] = [
       0, 1, 2
     ],
     normalize: false,
-    bias: 128,
     description: '让表面像金属浮雕一样凸起，适合纹理装饰。'
   },
   {
